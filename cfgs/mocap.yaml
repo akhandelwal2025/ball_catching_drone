@@ -1,0 +1,11 @@
+camera_params:
+  fps: 150
+  gain: 63                  # [0-63]
+  exposure: 255             # [0-255]
+  resolution: 'small'       # ['small, 'large]
+  colour: True
+  auto_gain: False
+  auto_exposure: False
+gauss_blur_kernel: [11, 11]
+mask_lower: [0., 0., 0.]
+mask_upper: [50., 50., 50.]

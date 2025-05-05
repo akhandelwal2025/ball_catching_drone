@@ -1,5 +1,5 @@
 from pseyepy import Camera
-from mocap import Mocap
+from src.mocap import Mocap
 import time
 import cv2
 import numpy as np
