@@ -3,13 +3,17 @@ from src.mocap import Mocap
 import time
 import cv2
 import numpy as np
+import argparse
+import yaml
 
 # BLACK HSV BOUNDS
 LOWER = np.array([0., 0., 0.])
 UPPER = np.array([50., 50., 50.])
 
-def main():
-    mocap = Mocap(fps=150)
+def main(args):
+    with open(args.mocap_cfg, "r") as file:
+        cfg = yaml.safe_load(file)
+    mocap = Mocap(cfg)
     start = time.time()
     frames = 0
     track_ball_time = 0
@@ -34,4 +38,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description='Description of your program')
+    parser.add_argument('--mocap_cfg', type=str, default='cfgs/mocap.yaml')
+    args = parser.parse_args()  
+    main(args)

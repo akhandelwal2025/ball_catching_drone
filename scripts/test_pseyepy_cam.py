@@ -4,7 +4,7 @@ import time
 
 c = Camera(fps=150, 
            resolution=Camera.RES_SMALL, 
-           colour=True, 
+           colour=False, 
            auto_gain = False, 
            auto_exposure = False,
            gain=63, 

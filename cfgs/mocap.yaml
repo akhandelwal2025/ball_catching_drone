@@ -9,3 +9,5 @@ camera_params:
 gauss_blur_kernel: [11, 11]
 mask_lower: [0., 0., 0.]
 mask_upper: [50., 50., 50.]
+wand_params:
+  num_centers: 3
