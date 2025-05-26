@@ -89,6 +89,61 @@ def eight_point_algorithm(left_frame_pts,
 
     return F
 
+def DLT(pixels,
+        projections):
+    """
+    Triangulate 3D point given 2D pixel coordinates using the Direct Linear Transform
+    Inputs:
+        pixels: np.ndarray - pixel coordinates for feature point. shape = N, 2 where N = num_cams
+        projections: np.ndarray - projection matrices for each camera relative to the origin point. shape = (N,3,4) where N = num_cam
+            *Note: first proj matrix should be identity as cam1 serves as the origin of the world coordinate frame
+    Outputs:
+        3-element np.ndarray representing best guess for triangulated 3D point  
+    """
+    # TODO this is surely wrong
+    breakpoint()
+    A = np.array([
+        [pixels[:, 1][:, np.newaxis] * projections[:, 2, :] - projections[:, 1, :]],
+        [projections[:, 0, :] - pixels[:, 0][:, np.newaxis] * projections[:, 2, :]]
+    ])
+    breakpoint()
+    U, S, Vh = np.linalg.svd(A)
+    X = Vh[:, -1]
+    X = X / X[-1]
+    return X[:-1]
+
+def ba_calc_residuals(x: np.ndarray,
+                      n_cams: int,
+                      obs_2d: np.ndarray):
+    """
+    Calculate residuals between projected 3D points and 2D observations to be optimized using Bundle Adjustment.
+    Format of this function is to follow the specification of method 'fun' outlined by scipy.optimize.least_squares (i.e.
+    fun(x0, *args, **kwargs))
+    Inputs:
+        x: np.ndarray - vector that will be optimized in the bundle adjustment process. should contain initial guess for camera poses 
+                        + estimates for 3D points as calculated by DLT
+        n_cams: int - number of cameras
+        obs_2d: np.ndarray - matrix containing 2D pixel observations for each camera in each timestep. shape = (n_obs * n_cams, 2)
+    Output:
+        np.ndarray of shape (n,) where n is the number of total residuals = n_obs * n_cams * 2
+        Note: the extra 2 is because there is a residual for each of the (u, v) in the observations
+    """
+    n_obs = obs_2d.shape[0] // n_cams
+    eulers = x[0:n_cams*2:2]
+    Rs = np.apply_along_axis(func1d=generate_rotation_matrix_from_eulers, 
+                                       axis=1,
+                                       arr=eulers)
+    ts = x[1:n_cams*2:2]
+    Ps = np.vstack((np.hstack((Rs, ts)), 
+                    np.array([[0., 0., 0., 1.]])))
+    
+    pts_3d = x[n_cams*2::2].reshape((3, -1)) # shape =  (3, n_obs). pts in cols allows multiplication with P = (3, 4)
+    pts_3d = np.stack((x, np.ones((1, pts_3d.shape[1]))), axis=1)
+    projected_2d = Ps @ pts_3d
+    residuals = (projected_2d-obs_2d).flatten()
+    assert residuals.shape == (n_obs * n_cams * 2,)
+    return residuals
+
 def five_point_algorithm(points):
     pass
 

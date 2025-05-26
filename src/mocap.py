@@ -79,16 +79,7 @@ class Mocap:
                 img_centers.append([int(M["m10"] / M["m00"]), int(M["m01"] / M["m00"])])
             centers[i] = img_centers
         return centers
-    
-    def create_correspondences(self, centers):
-        """
-        Given centers from different cameras, establish correspondences using wand geometry
-        Inputs:
-            centers: List - tracking dot centers in any order. shape = (num_cams, num_centers, 2)
-        Output:
-            centers with each index representing the same dot
-        """
-        
+
     def calibrate_camera_poses(self, filename):
         """
         Given images captured by mocap, extract features to calculate camera poses

@@ -3,11 +3,8 @@ import cv2
 import time
 
 c = Camera(fps=150, 
-           resolution=Camera.RES_SMALL, 
-           colour=False, 
-           auto_gain = False, 
-           auto_exposure = False,
-           gain=63, 
+           resolution=Camera.RES_SMALL,
+           gain=63,
            exposure=255)
 # c.check_fps(n_seconds=60)
 
