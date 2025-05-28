@@ -8,7 +8,7 @@ class Mocap:
                  cfg):
         self.cfg = cfg
         self.cam_params = cfg['camera_params']
-        self.wand_params = cfg['wand_params']
+        # self.wand_params = cfg['wand_params'] # TODO not needed anymore
 
         if self.cam_params['resolution'] in ['small', 'large']:
             res = self.cam_params['resolution']
@@ -79,6 +79,10 @@ class Mocap:
                 img_centers.append([int(M["m10"] / M["m00"]), int(M["m01"] / M["m00"])])
             centers[i] = img_centers
         return centers
+
+    def bundle_adjustmen(self):
+        pass
+
 
     def calibrate_camera_poses(self, filename):
         """

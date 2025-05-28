@@ -13,10 +13,11 @@ start = time.time()
 count = 0
 try:
     while True:
-        frame, timestep = c.read()
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        # frame = cv2.cvtColor(frame, cv2.COLOR_RGB2HSV)
-        cv2.imshow("120 Hz image", frame)
+        frames, timesteps = c.read()
+        for i, frame in enumerate(frames):
+            frame = cv2.cvtColor(frames[i], cv2.COLOR_BGR2RGB)
+            # frame = cv2.cvtColor(frame, cv2.COLOR_RGB2HSV)
+            cv2.imshow(f"Cam {i+1}", frame)
         cv2.waitKey(1)
         count += 1
 except:

@@ -10,6 +10,27 @@ eulers:
   cam3: [0., 0., 225.] 
   cam4: [0., 0., 315.] 
   std: 5                    # deg
+intrinsics:
+  cam1:
+    fx: 120.
+    fy: 120.
+    ox: 320.
+    oy: 240.
+  cam2:
+    fx: 120.
+    fy: 120.
+    ox: 320.
+    oy: 240.
+  cam3:
+    fx: 120.
+    fy: 120.
+    ox: 320.
+    oy: 240.
+  cam4:
+    fx: 120.
+    fy: 120.
+    ox: 320.
+    oy: 240.
 use_lookat: True
 lookat: &pt [5., 5., 5.]
 draw_FOV: True
@@ -18,3 +39,4 @@ cone_length: 10.0
 point_gen:
   center: *pt
   radius: 4.0               # m
+img_resolution: [640, 480]  # width, height

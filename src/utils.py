@@ -3,19 +3,23 @@ from numpy import cos as c
 from numpy import sin as s
 from scipy.spatial.transform import Rotation as R
 
-def extract_eulers_from_rotation_matrix_XYZ(R):
+def extract_eulers_from_rotation_matrix_XYZ(rot_mtrx):
     """
     Given a rotation matrix R, extract eulers assuming XYZ rotation
     Inputs:
         R: np.ndarray - rotation matrix
     """
-    theta_y = np.arcsin(-R[2, 0])
-    theta_x = np.arctan2(R[2, 1] / np.cos(theta_y), R[2, 2] / np.cos(theta_y))
-    theta_z = np.arctan2(R[1, 0] / np.cos(theta_y), R[0, 0] / np.cos(theta_y))
-    # theta_x = np.arctan2(R[2, 1], R[2, 2])
-    # theta_y = np.arctan2(-R[2, 0], np.sqrt(R[0, 0]**2 + R[1, 0]**2))
-    # theta_z = np.arctan2(R[1, 0], R[0, 0])
-    return np.array([theta_x, theta_y, theta_z])
+    # theta_y = np.arcsin(-rot_mtrx[2, 0])
+    # theta_x = np.arctan2(rot_mtrx[2, 1] / np.cos(theta_y), rot_mtrx[2, 2] / np.cos(theta_y))
+    # theta_z = np.arctan2(rot_mtrx[1, 0] / np.cos(theta_y), rot_mtrx[0, 0] / np.cos(theta_y))
+    # # theta_x = np.arctan2(rot_mtrx[2, 1], rot_mtrx[2, 2])
+    # # theta_y = np.arctan2(-rot_mtrx[2, 0], np.sqrt(rot_mtrx[0, 0]**2 + rot_mtrx[1, 0]**2))
+    # # theta_z = np.arctan2(rot_mtrx[1, 0], rot_mtrx[0, 0])
+    # eulers = np.array([theta_x, theta_y, theta_z])
+    # breakpoint()
+    # assert np.allclose(R.from_matrix(rot_mtrx).as_euler('xyz'), eulers)
+    # return eulers
+    return R.from_matrix(rot_mtrx).as_euler('xyz')
 
 def lookat(origin, target, up, return_eulers=True):
     """
@@ -26,14 +30,21 @@ def lookat(origin, target, up, return_eulers=True):
         up: np.ndarray - (1, 3) indicating world up (i.e. +Z)
         return_eulers: bool - if True, extract eulers from rotation matrix and return those. Otherwise, return rotation matrix
             *Note: eulers are calculated assuming a XYZ rotation
+    Outputs:
+        if return_eulers == True, return eulers
+        if return_eulers == False, return R
+            *Note: rotation is from body -> world
     """
     assert np.allclose(np.linalg.norm(up), 1.0), "up vector is not normalized"
     forward = (target-origin) / np.linalg.norm(target-origin, axis=1, keepdims=True)
     left = np.cross(up, forward)
-    left = left / np.linalg.norm(left, keepdims=True)
+    left = left / np.linalg.norm(left, axis=1, keepdims=True)
     body_up = np.cross(forward, left)
-    body_up = body_up / np.linalg.norm(body_up, keepdims=True)
-    R = np.stack((forward, left, body_up), axis=-1)
+    body_up = body_up / np.linalg.norm(body_up, axis=1, keepdims=True)
+
+    # Note: R here is body -> world
+    #       R.t then is world -> body
+    R = np.stack((forward, left, body_up), axis=-1) 
     if return_eulers:
         return np.array([extract_eulers_from_rotation_matrix_XYZ(R_i) for R_i in R])    
     else:
