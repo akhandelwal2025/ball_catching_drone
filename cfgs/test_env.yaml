@@ -3,7 +3,7 @@ pos:
   cam2: [10., 0., 10.]      # bottom right
   cam3: [10., 10., 10.]     # top right
   cam4: [0., 10., 10.]      # top left
-  std: 0.5
+  std: 0.0
 eulers:
   cam1: [0., 0., 45.]   
   cam2: [0., 0., 135.] 
@@ -12,23 +12,23 @@ eulers:
   std: 5                    # deg
 intrinsics:
   cam1:
-    fx: 120.
-    fy: 120.
+    fx: 320.
+    fy: 320.
     ox: 320.
     oy: 240.
   cam2:
-    fx: 120.
-    fy: 120.
+    fx: 320.
+    fy: 320.
     ox: 320.
     oy: 240.
   cam3:
-    fx: 120.
-    fy: 120.
+    fx: 320.
+    fy: 320.
     ox: 320.
     oy: 240.
   cam4:
-    fx: 120.
-    fy: 120.
+    fx: 320.
+    fy: 320.
     ox: 320.
     oy: 240.
 use_lookat: True

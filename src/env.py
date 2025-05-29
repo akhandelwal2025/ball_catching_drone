@@ -174,7 +174,7 @@ class TestEnv():
         bounds = np.full((3,), self.cfg['point_gen']['radius'])
         delta = np.random.uniform(low=-bounds,
                                   high=bounds)
-        self.feature_pt = np.array(self.cfg['point_gen']['center']) + [4., 0., 0.,]
+        self.feature_pt = np.array(self.cfg['point_gen']['center']) + delta
         return self.feature_pt
     
     def pt_in_fovs(self,
@@ -185,7 +185,7 @@ class TestEnv():
             pt: np.ndarray - shape = (3,)
         Output True if pt can be seen by all cameras, otherwise False
         """
-        for i in range(len(self.gt_cam_pos)):
+        for i in range(self.n_cams):
             origin = self.gt_cam_pos[i]
             R = utils.generate_rotation_matrix_from_eulers(self.gt_cam_eulers[i])
             forward_dir_wf = R @ np.array([1., 0., 0.])
@@ -208,8 +208,8 @@ class TestEnv():
         self.draw_axes(self.gt_cam_pos, self.gt_cam_eulers, 'green')
 
         # render current cams
-        self.ax3D.scatter(self.cam_pos[:, 0], self.cam_pos[:, 1], self.cam_pos[:, 2], color='red', s=30)
-        self.draw_axes(self.cam_pos, self.cam_eulers, 'red')
+        # self.ax3D.scatter(self.cam_pos[:, 0], self.cam_pos[:, 1], self.cam_pos[:, 2], color='red', s=30)
+        # self.draw_axes(self.cam_pos, self.cam_eulers, 'red')
 
         # render FOV cones
         if self.cfg['draw_FOV']:
