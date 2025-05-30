@@ -1,3 +1,5 @@
+use_fake_imgs: True
+fake_imgs_filepath: '/'
 camera_params:
   fps: 150
   gain: 63                  # [0-63]

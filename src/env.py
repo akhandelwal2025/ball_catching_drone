@@ -63,7 +63,8 @@ class TestEnv():
             )
 
     def construct_projections(self):
-        self.extrinsics = np.empty((4, 3, 4))
+        self.extrinsics_wc = np.empty((4, 3, 4))
+        self.extrinsics_cw = np.empty((4, 3, 4))
         for i in range(self.n_cams):
             R_cw = utils.generate_rotation_matrix_from_eulers(self.gt_cam_eulers[i]) # body -> world, +x forward, +y left, +z up
             R_wc = R_cw.T # world -> body
@@ -74,22 +75,22 @@ class TestEnv():
                 [0., 0., 1.], 
                 [1., 0., 0.,]
             ]) @ R_wc
-            # # verify rotation matrix
-            # # take vector from camera to target. project into camera frame, this should only have a z-axis component
-            # d = self.feature_pt - self.gt_cam_pos[i]
-            # d /= np.linalg.norm(d)
-            # proj_d = R_wc @ d # d here is a world vector. R.T ensures world -> body
-            # breakpoint()
             t = -R_wc @ self.gt_cam_pos[i][:, np.newaxis]
             ext_wc = np.hstack((R_wc, t))
-            self.extrinsics[i, :, :] = ext_wc
-        self.projections = self.intrinsics @ self.extrinsics
+            
+            # can't directly use R_cw here because R_wc includes a camera frame transform. 
+            # Therefore, to be completel correct, best to just do R_wc.T which includes that frame transform
+            ext_cw = np.hstack((R_wc.T, self.gt_cam_pos[i][:, np.newaxis])) 
+            self.extrinsics_wc[i, :, :] = ext_wc
+            self.extrinsics_cw[i, :, :] = ext_cw
+        self.projections = self.intrinsics @ self.extrinsics_wc
 
     def gen_imgs(self):
         img_resolution = self.cfg['img_resolution']
         w, h = img_resolution[0], img_resolution[1]
         self.fake_imgs = np.empty((4, h, w))
-        self.feature_pt = np.vstack((self.feature_pt[:, np.newaxis], np.ones((1, 1))))
+        self.projected_pts = np.empty((4, 2))
+        feature_pt_homo = np.vstack((self.feature_pt[:, np.newaxis], np.ones((1, 1))))
         DIRS = {
             (-1, -1), (0, -1), (1, -1),
             (-1, 0),           (1, 0),
@@ -100,12 +101,12 @@ class TestEnv():
             return (0 <= y < h) and (0 <= x < w)
      
         for i in range(self.n_cams):
-            breakpoint()
             P = self.projections[i]
-            projected_pt = (P @ self.feature_pt).squeeze()
+            projected_pt = (P @ feature_pt_homo).squeeze()
             projected_pt /= projected_pt[-1]
             projected_pt = projected_pt[:2]
             projected_pt = np.round(projected_pt).astype(int)
+            self.projected_pts[i, :] = projected_pt
             x, y = projected_pt[0], projected_pt[1]
             print(y, x)
             if valid(y, x):

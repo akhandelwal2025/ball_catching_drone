@@ -111,15 +111,15 @@ def DLT(pixels,
     Outputs:
         3-element np.ndarray representing best guess for triangulated 3D point  
     """
-    # TODO this is surely wrong
-    breakpoint()
-    A = np.array([
-        [pixels[:, 1][:, np.newaxis] * projections[:, 2, :] - projections[:, 1, :]],
-        [projections[:, 0, :] - pixels[:, 0][:, np.newaxis] * projections[:, 2, :]]
-    ])
-    breakpoint()
+    # vectorized creation of A - kinda overkill for four cams, but good numpy practice lol
+    N = pixels.shape[0]
+    row1 = pixels[:, 1][:, np.newaxis] * projections[:, 2, :] - projections[:, 1, :] # vP_2 - P_1
+    row2 = projections[:, 0, :] - pixels[:, 0][:, np.newaxis] * projections[:, 2, :] # P_0 - uP_2
+    A = np.empty((2*N, 4), dtype=np.float64)
+    A[0::2] = row1
+    A[1::2] = row2
     U, S, Vh = np.linalg.svd(A)
-    X = Vh[:, -1]
+    X = Vh[-1, :]
     X = X / X[-1]
     return X[:-1]
 

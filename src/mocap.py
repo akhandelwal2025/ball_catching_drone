@@ -18,7 +18,6 @@ class Mocap:
             raise Exception(f"camera_params.resolution not in ['small', 'large], received {self.cam_params['resolution']} of type {type(self.cam_params['resolution'])}")
         
         self.num_cameras = cam_count()
-        breakpoint()
         self.cameras = Camera(**self.cam_params)
 
     def read_cameras(self):
