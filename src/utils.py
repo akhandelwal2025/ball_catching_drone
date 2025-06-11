@@ -151,25 +151,6 @@ def ba_calc_residuals(x: np.ndarray,
     assert residuals.shape == (n_obs * n_cams * 2,)
     return residuals
 
-    # n_obs = obs_2d.shape[0] // n_cams
-    # eulers = x[0:n_cams*2:2]
-    # Rs = np.apply_along_axis(func1d=generate_rotation_matrix_from_eulers, 
-    #                                    axis=1,
-    #                                    arr=eulers)
-    # ts = x[1:n_cams*2:2]
-    # Ps = np.vstack((np.hstack((Rs, ts)), 
-    #                 np.array([[0., 0., 0., 1.]])))
-    
-    # pts_3d = x[n_cams*2:].T                                       # og shape = (n_obs, 3), desired shape =  (3, n_obs)
-    # pts_3d = np.stack((x, np.ones((1, pts_3d.shape[1]))), axis=1) # add homo coords, (4, n_obs)
-    # projected_2d = Ps @ pts_3d                                    # (n_cams, 3, 4) @ (4, n_obs) = (n_cams, 3, n_obs)
-    # projected_2d = np.transpose(0, 2, 1).reshape(-1, 3)           # (n_cams * n_obs, 3)
-    # projected_2d /= projected_2d[:, -1]
-    # projected_2d = projected_2d[:, :2]                            # get rid of homo coords
-    # residuals = (projected_2d-obs_2d).flatten()
-    # assert residuals.shape == (n_obs * n_cams * 2,)
-    # return residuals
-
 def five_point_algorithm(points):
     pass
 

@@ -8,7 +8,6 @@ import yaml
 def main(args):
     with open(args.mocap_cfg, "r") as file:
         mocap_cfg = yaml.safe_load(file)
-    arrs = np.load('data/fake_imgs_5.npz')
     mocap = Mocap(mocap_cfg)
     n_cams = mocap.n_cams
     projections = mocap.projections
@@ -26,7 +25,6 @@ def main(args):
                          obs_3d.flatten()))
     residuals = utils.ba_calc_residuals(x0, n_cams, obs_2d)
     breakpoint()
-
         
 if __name__ == "__main__":
     np.set_printoptions(threshold=np.inf)
