@@ -1,6 +1,39 @@
+pos:
+  cam1: [0., 0., 0.]       # bottom left
+  cam2: [10., 0., 0.]      # bottom right
+  cam3: [10., 10., 0.]     # top right
+  cam4: [0., 10., 0.]      # top left
+  std: 0.0
+eulers:
+  cam1: [-3.18055468e-15,  3.52643897e+01,  4.50000000e+01]   
+  cam2: [ 0.00000000e+00,  3.52643897e+01,  1.35000000e+02] 
+  cam3: [ 0.00000000e+00,  3.52643897e+01, -1.35000000e+02] 
+  cam4: [ 3.18055468e-15,  3.52643897e+01, -4.50000000e+01] 
+  std: 5.0                  # deg
+intrinsics:
+  cam1:
+    fx: 320.
+    fy: 320.
+    ox: 320.
+    oy: 240.
+  cam2:
+    fx: 320.
+    fy: 320.
+    ox: 320.
+    oy: 240.
+  cam3:
+    fx: 320.
+    fy: 320.
+    ox: 320.
+    oy: 240.
+  cam4:
+    fx: 320.
+    fy: 320.
+    ox: 320.
+    oy: 240.
 use_fake_imgs: True
-fake_imgs_filepath: '/'
-camera_params:
+fake_imgs_filepath: 'data/fake_imgs_5.npz'
+pseyepy_params:
   fps: 150
   gain: 63                  # [0-63]
   exposure: 255             # [0-255]

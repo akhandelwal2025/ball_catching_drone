@@ -3,7 +3,7 @@ import argparse
 from src.env import TestEnv
 import yaml
 
-DEFAULT_NUM_TIMESTEPS = 10
+DEFAULT_NUM_TIMESTEPS = 5
 
 def main(args):
     with open(args.env_cfg, "r") as file:
@@ -23,6 +23,7 @@ def main(args):
             fake_imgs[i, ...] = env.fake_imgs
             pts_2d[i, :, :] = env.projected_pts
             pts_3d[i, :] = env.feature_pt
+            breakpoint()
             i += 1
     np.savez(args.save_filename, fake_imgs=fake_imgs, pts_2d=pts_2d, pts_3d=pts_3d, projections=projections, extrinsics_cw=extrinsics_cw)
 

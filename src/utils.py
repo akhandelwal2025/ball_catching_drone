@@ -127,12 +127,12 @@ def ba_calc_residuals(x: np.ndarray,
                       n_cams: int,
                       obs_2d: np.ndarray):
     """
-    Calculate residuals between projected 3D points and 2D observations to be optimized using Bundle Adjustment.
+    Calculate residuals between projected 3D points and 2D observations to be optimized using bundle adjustment.
     Format of this function is to follow the specification of method 'fun' outlined by scipy.optimize.least_squares (i.e.
     fun(x0, *args, **kwargs))
     Inputs:
-        x: np.ndarray - vector that will be optimized in the bundle adjustment process. should contain initial guess for camera poses 
-                        + estimates for 3D points as calculated by DLT
+        x: np.ndarray - vector that will be optimized in the bundle adjustment process. should contain initial guess for camera projection matrices 
+                        + estimates for 3D points as calculated by DLT. Shape = (n_cams * 12 + n_obs * 3)
         n_cams: int - number of cameras
         obs_2d: np.ndarray - matrix containing 2D pixel observations for each camera in each timestep. shape = (n_obs * n_cams, 2)
     Output:
@@ -140,20 +140,35 @@ def ba_calc_residuals(x: np.ndarray,
         Note: the extra 2 is because there is a residual for each of the (u, v) in the observations
     """
     n_obs = obs_2d.shape[0] // n_cams
-    eulers = x[0:n_cams*2:2]
-    Rs = np.apply_along_axis(func1d=generate_rotation_matrix_from_eulers, 
-                                       axis=1,
-                                       arr=eulers)
-    ts = x[1:n_cams*2:2]
-    Ps = np.vstack((np.hstack((Rs, ts)), 
-                    np.array([[0., 0., 0., 1.]])))
-    
-    pts_3d = x[n_cams*2::2].reshape((3, -1)) # shape =  (3, n_obs). pts in cols allows multiplication with P = (3, 4)
-    pts_3d = np.stack((x, np.ones((1, pts_3d.shape[1]))), axis=1)
-    projected_2d = Ps @ pts_3d
+    Ps = x[:n_cams*12].reshape((n_cams, 3, 4))
+    obs_3d = x[n_cams*12:].reshape(n_obs, 3).T                              # (3, n_obs)
+    obs_3d = np.vstack((obs_3d, np.ones((1, obs_3d.shape[1]))))             # add homo coords, (4, n_obs)
+    projected_2d = Ps @ obs_3d                                              # (n_cams, 3, 4) @ (4, n_obs) = (n_cams, 3, n_obs)
+    projected_2d = np.transpose(projected_2d, (2, 0, 1)).reshape(-1, 3)     # (n_obs * n_cams, 3). ordering of (2, 0, 1) is important to preserve proper interleaving
+    projected_2d = projected_2d / projected_2d[:, -1][:, np.newaxis]
+    projected_2d = projected_2d[:, :2]                                      # get rid of homo coords, (n_obs * n_cams, 2)
     residuals = (projected_2d-obs_2d).flatten()
     assert residuals.shape == (n_obs * n_cams * 2,)
     return residuals
+
+    # n_obs = obs_2d.shape[0] // n_cams
+    # eulers = x[0:n_cams*2:2]
+    # Rs = np.apply_along_axis(func1d=generate_rotation_matrix_from_eulers, 
+    #                                    axis=1,
+    #                                    arr=eulers)
+    # ts = x[1:n_cams*2:2]
+    # Ps = np.vstack((np.hstack((Rs, ts)), 
+    #                 np.array([[0., 0., 0., 1.]])))
+    
+    # pts_3d = x[n_cams*2:].T                                       # og shape = (n_obs, 3), desired shape =  (3, n_obs)
+    # pts_3d = np.stack((x, np.ones((1, pts_3d.shape[1]))), axis=1) # add homo coords, (4, n_obs)
+    # projected_2d = Ps @ pts_3d                                    # (n_cams, 3, 4) @ (4, n_obs) = (n_cams, 3, n_obs)
+    # projected_2d = np.transpose(0, 2, 1).reshape(-1, 3)           # (n_cams * n_obs, 3)
+    # projected_2d /= projected_2d[:, -1]
+    # projected_2d = projected_2d[:, :2]                            # get rid of homo coords
+    # residuals = (projected_2d-obs_2d).flatten()
+    # assert residuals.shape == (n_obs * n_cams * 2,)
+    # return residuals
 
 def five_point_algorithm(points):
     pass

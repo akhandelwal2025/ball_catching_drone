@@ -1,8 +1,8 @@
 pos:
-  cam1: [0., 0., 0.]       # bottom left
-  cam2: [10., 0., 0.]      # bottom right
-  cam3: [10., 10., 0.]     # top right
-  cam4: [0., 10., 0.]      # top left
+  cam1: [0., 0., 10.]       # bottom left
+  cam2: [10., 0., 10.]      # bottom right
+  cam3: [10., 10., 10.]     # top right
+  cam4: [0., 10., 10.]      # top left
   std: 0.0
 eulers:
   cam1: [0., 0., 45.]   
@@ -31,12 +31,10 @@ intrinsics:
     fy: 320.
     ox: 320.
     oy: 240.
-use_lookat: True
-lookat: &pt [5., 5., -5.]
-draw_FOV: True
-cam_FOV_half_angle: 30    # deg
-cone_length: 10.0
-point_gen:
-  center: *pt
-  radius: 4.0               # m
-img_resolution: [640, 480]  # width, height
+fps: 150
+gain: 63                  # [0-63]
+exposure: 255             # [0-255]
+resolution: 'small'       # ['small, 'large]
+colour: True
+auto_gain: False
+auto_exposure: False
