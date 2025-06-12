@@ -6,6 +6,7 @@ class TestEnv():
     def __init__(self, cfg):
         self.cfg = cfg
         self.n_cams = 4
+        self.resolution = self.cfg['img_resolution']
 
         # start at pos, orientation specified by cfg
         self.feature_pt = self.gen_random_pt()
@@ -13,11 +14,17 @@ class TestEnv():
                                  self.cfg['pos']['cam2'],
                                  self.cfg['pos']['cam3'],
                                  self.cfg['pos']['cam4']], axis=0)
-        self.cam_eulers = np.stack([self.cfg['eulers']['cam1'],
-                                    self.cfg['eulers']['cam2'],
-                                    self.cfg['eulers']['cam3'],
-                                    self.cfg['eulers']['cam4']], axis=0)
-        self.cam_eulers = np.radians(self.cam_eulers)
+        if self.cfg['use_lookat']:
+            self.cam_eulers = utils.lookat(origin=self.cam_pos,
+                                              target=np.array(self.cfg['lookat'])[np.newaxis, :], # newaxis enables broadcasting
+                                              up=np.array([0., 0., 1.])[np.newaxis, :],
+                                              return_eulers=True)
+        else:
+            self.cam_eulers = np.stack([self.cfg['eulers']['cam1'],
+                                        self.cfg['eulers']['cam2'],
+                                        self.cfg['eulers']['cam3'],
+                                        self.cfg['eulers']['cam4']], axis=0)
+            self.cam_eulers = np.radians(self.cam_eulers)
         self.construct_intrinsics()
         
         # gt cam pos, orientation are generated
@@ -32,7 +39,7 @@ class TestEnv():
         else:
             self.gt_cam_eulers = np.radians(self.gt_cam_eulers) #TODO wtf is this            
         self.construct_projections()
-
+        
         self.fig = plt.figure()
         self.gs = self.fig.add_gridspec(2, 3)
         self.ax3D = self.fig.add_subplot(self.gs[:, 0], projection='3d')
@@ -63,8 +70,32 @@ class TestEnv():
             )
 
     def construct_projections(self):
+        # construct for est cam locations first
         self.extrinsics_wc = np.empty((4, 3, 4))
         self.extrinsics_cw = np.empty((4, 3, 4))
+        for i in range(self.n_cams):
+            R_cw = utils.generate_rotation_matrix_from_eulers(self.cam_eulers[i]) # body -> world, +x forward, +y left, +z up
+            R_wc = R_cw.T # world -> body
+            # need to transform to +x left, +y up, +z forward
+            # this ensures optical axis is aligned with +z enabling proper homogenous calculation
+            R_wc = np.array([
+                [0., 1., 0.,], 
+                [0., 0., 1.], 
+                [1., 0., 0.,]
+            ]) @ R_wc
+            t = -R_wc @ self.cam_pos[i][:, np.newaxis]
+            ext_wc = np.hstack((R_wc, t))
+            
+            # can't directly use R_cw here because R_wc includes a camera frame transform. 
+            # Therefore, to be completel correct, best to just do R_wc.T which includes that frame transform
+            ext_cw = np.hstack((R_wc.T, self.cam_pos[i][:, np.newaxis])) 
+            self.extrinsics_wc[i, :, :] = ext_wc
+            self.extrinsics_cw[i, :, :] = ext_cw
+        self.projections = self.intrinsics @ self.extrinsics_wc
+
+        # repeat for ground truth
+        self.gt_extrinsics_wc = np.empty((4, 3, 4))
+        self.gt_extrinsics_cw = np.empty((4, 3, 4))
         for i in range(self.n_cams):
             R_cw = utils.generate_rotation_matrix_from_eulers(self.gt_cam_eulers[i]) # body -> world, +x forward, +y left, +z up
             R_wc = R_cw.T # world -> body
@@ -81,13 +112,12 @@ class TestEnv():
             # can't directly use R_cw here because R_wc includes a camera frame transform. 
             # Therefore, to be completel correct, best to just do R_wc.T which includes that frame transform
             ext_cw = np.hstack((R_wc.T, self.gt_cam_pos[i][:, np.newaxis])) 
-            self.extrinsics_wc[i, :, :] = ext_wc
-            self.extrinsics_cw[i, :, :] = ext_cw
-        self.projections = self.intrinsics @ self.extrinsics_wc
+            self.gt_extrinsics_wc[i, :, :] = ext_wc
+            self.gt_extrinsics_cw[i, :, :] = ext_cw
+        self.gt_projections = self.intrinsics @ self.gt_extrinsics_wc
 
     def gen_imgs(self):
-        img_resolution = self.cfg['img_resolution']
-        w, h = img_resolution[0], img_resolution[1]
+        w, h = self.resolution[0], self.resolution[1]
         self.fake_imgs = np.empty((4, h, w))
         self.projected_pts = np.empty((4, 2))
         feature_pt_homo = np.vstack((self.feature_pt[:, np.newaxis], np.ones((1, 1))))
@@ -101,7 +131,7 @@ class TestEnv():
             return (0 <= y < h) and (0 <= x < w)
      
         for i in range(self.n_cams):
-            P = self.projections[i]
+            P = self.gt_projections[i]
             projected_pt = (P @ feature_pt_homo).squeeze()
             projected_pt /= projected_pt[-1]
             projected_pt = projected_pt[:2]

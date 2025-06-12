@@ -125,6 +125,7 @@ def DLT(pixels,
 
 def ba_calc_residuals(x: np.ndarray,
                       n_cams: int,
+                      obs_3d: np.ndarray,
                       obs_2d: np.ndarray):
     """
     Calculate residuals between projected 3D points and 2D observations to be optimized using bundle adjustment.
@@ -140,8 +141,10 @@ def ba_calc_residuals(x: np.ndarray,
         Note: the extra 2 is because there is a residual for each of the (u, v) in the observations
     """
     n_obs = obs_2d.shape[0] // n_cams
-    Ps = x[:n_cams*12].reshape((n_cams, 3, 4))
-    obs_3d = x[n_cams*12:].reshape(n_obs, 3).T                              # (3, n_obs)
+    Ps = x.reshape((n_cams, 3, 4))
+    obs_3d = obs_3d.T
+    # Ps = x[:n_cams*12].reshape((n_cams, 3, 4))
+    # obs_3d = x[n_cams*12:].reshape(n_obs, 3).T                              # (3, n_obs)
     obs_3d = np.vstack((obs_3d, np.ones((1, obs_3d.shape[1]))))             # add homo coords, (4, n_obs)
     projected_2d = Ps @ obs_3d                                              # (n_cams, 3, 4) @ (4, n_obs) = (n_cams, 3, n_obs)
     projected_2d = np.transpose(projected_2d, (2, 0, 1)).reshape(-1, 3)     # (n_obs * n_cams, 3). ordering of (2, 0, 1) is important to preserve proper interleaving

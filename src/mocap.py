@@ -1,8 +1,11 @@
 from pseyepy import Camera, cam_count
+from abc import ABC, abstractmethod
 import cv2
 import numpy as np
 import time
 import src.utils as utils
+from src.env import TestEnv
+from scipy.optimize import least_squares
 
 class FakeCameras():
     def __init__(self,
@@ -19,84 +22,30 @@ class FakeCameras():
         self.i = (self.i + 1) % self.N
         return imgs, timestep
 
-class Mocap:
-    def __init__(self,
-                 cfg):
-        self.cfg = cfg
-        self.pseyepy_params = cfg['pseyepy_params']
-        # self.wand_params = cfg['wand_params'] # TODO not needed anymore
+class BaseMocap(ABC):
+    def __init__(self, mocap_cfg):
+        self.mocap_cfg = mocap_cfg
 
-        if self.pseyepy_params['resolution'] in ['small', 'large']:
-            res = self.pseyepy_params['resolution']
-            self.resolution = (320, 240) if res == 'small' else (640, 480)
-            self.pseyepy_params['resolution'] = Camera.RES_SMALL if res == 'small' else Camera.RES_LARGE
-        else:
-            raise Exception(f"pseyepy_params.resolution not in ['small', 'large], received {self.pseyepy_params['resolution']} of type {type(self.pseyepy_params['resolution'])}")
-        
-        if self.cfg['use_fake_imgs']:
-            self.n_cams = 4
-            self.cameras = FakeCameras(fake_imgs_filepath=self.cfg['fake_imgs_filepath'])
-        else:
-            self.n_cams = cam_count()
-            self.cameras = Camera(**self.pseyepy_params)
-
-        self.cam_pos = np.stack([self.cfg['pos']['cam1'],
-                                 self.cfg['pos']['cam2'],
-                                 self.cfg['pos']['cam3'],
-                                 self.cfg['pos']['cam4']], axis=0)
-        self.cam_eulers = np.stack([self.cfg['eulers']['cam1'],
-                                    self.cfg['eulers']['cam2'],
-                                    self.cfg['eulers']['cam3'],
-                                    self.cfg['eulers']['cam4']], axis=0)
-        self.cam_eulers = np.radians(self.cam_eulers)
-        self.construct_intrinsics()
-        self.construct_projections()
-
-    def construct_intrinsics(self):
-        self.intrinsics = np.empty((4, 3, 3))
-        for i, cam in enumerate(['cam1', 'cam2', 'cam3', 'cam4']):
-            fx = self.cfg['intrinsics'][cam]['fx'] 
-            fy = self.cfg['intrinsics'][cam]['fy']
-            ox = self.cfg['intrinsics'][cam]['ox'] 
-            oy = self.cfg['intrinsics'][cam]['oy']
-            self.intrinsics[i, :, :] = np.array(
-                [
-                    [fx, 0., ox],
-                    [0., fy, oy],
-                    [0., 0., 1.]
-                ]
-            )
-
-    def construct_projections(self):
-        self.extrinsics_wc = np.empty((4, 3, 4))
-        self.extrinsics_cw = np.empty((4, 3, 4))
-        for i in range(self.n_cams):
-            R_cw = utils.generate_rotation_matrix_from_eulers(self.cam_eulers[i]) # body -> world, +x forward, +y left, +z up
-            R_wc = R_cw.T # world -> body
-            # need to transform to +x left, +y up, +z forward
-            # this ensures optical axis is aligned with +z enabling proper homogenous calculation
-            R_wc = np.array([
-                [0., 1., 0.,], 
-                [0., 0., 1.], 
-                [1., 0., 0.,]
-            ]) @ R_wc
-            t = -R_wc @ self.cam_pos[i][:, np.newaxis]
-            ext_wc = np.hstack((R_wc, t))
-            
-            # can't directly use R_cw here because R_wc includes a camera frame transform. 
-            # Therefore, to be completel correct, best to just do R_wc.T which includes that frame transform
-            ext_cw = np.hstack((R_wc.T, self.cam_pos[i][:, np.newaxis])) 
-            self.extrinsics_wc[i, :, :] = ext_wc
-            self.extrinsics_cw[i, :, :] = ext_cw
-        self.projections = self.intrinsics @ self.extrinsics_wc
-
-    def read_cameras(self):
-        imgs, timesteps = self.cameras.read()
-        for img in imgs:
-            img = img.copy()
-            img = cv2.GaussianBlur(img, self.cfg['gauss_blur_kernel'], 0)
-        return imgs, timesteps
+        self.intrinsics = self.construct_intrinsics()
+        self.extrinsics = self.construct_extrinsics()
+        self.projections = self.construct_projections()
     
+    @abstractmethod
+    def construct_intrinsics(self):
+        pass
+    
+    @abstractmethod
+    def construct_extrinsics(self):
+        pass
+
+    @abstractmethod
+    def construct_projections(self):
+        pass
+    
+    @abstractmethod
+    def read_cameras(self):
+        pass
+
     def collect_imgs(self,
                      num_timesteps,
                      save = False):
@@ -129,7 +78,7 @@ class Mocap:
             # mask = cv2.inRange(blurred, lower, upper) # TODO need to define lower, upper bound for intensity in the image?
             # TODO second parameter = kernel size used to convolve image. 
             # Need to play around with that and iterations to get better performance
-            if not self.cfg['use_fake_imgs']:
+            if not self.mocap_cfg['use_fake_imgs']:
                 mask = cv2.erode(mask, None, iterations=2)
                 mask = cv2.dilate(mask, None, iterations=2)
             # TODO the second parameter here, CHAIN_APPROX_SIMPLE compresses the contour by storing only the points
@@ -149,10 +98,83 @@ class Mocap:
                 img_centers.append([int(M["m10"] / M["m00"]), int(M["m01"] / M["m00"])])
             centers[i] = img_centers
         return centers
+    
+    # TODO basically copy paste of scripts/test_bundle_adjustment.py
+    def bundle_adjustment(self, n_obs):
+        obs_2d = np.empty((self.n_cams * n_obs, 2), dtype=int)
+        obs_3d_og = np.empty((n_obs, 3), dtype=np.float32)
+        obs_3d_gt = np.empty((n_obs, 3), dtype=np.float32)
+        for i in range(n_obs):
+            imgs = self.read_cameras()
+            pixels = self.locate_centers(imgs, 
+                                         num_centers=1, 
+                                         lower=200,
+                                         upper=256).squeeze() 
+            obs_3d_og[i] = utils.DLT(pixels, self.projections)
+            obs_3d_gt[i] = utils.DLT(pixels, self.env.gt_projections)
+            obs_2d[self.n_cams*i:self.n_cams*(i+1)] = pixels
+        # x0_og = np.concatenate((self.projections.flatten(), 
+        #                      obs_3d_og.flatten()))
+        # x0_gt = np.concatenate((self.env.gt_projections.flatten(), 
+        #                      obs_3d_gt.flatten()))
+        og_residuals = utils.ba_calc_residuals(self.env.projections.flatten(), self.n_cams, obs_3d_gt, obs_2d)
+        gt_residuals = utils.ba_calc_residuals(self.env.gt_projections.flatten(), self.n_cams, obs_3d_gt, obs_2d)
+        breakpoint()
+        res = least_squares(fun=utils.ba_calc_residuals,
+                            x0=self.env.projections.flatten(),
+                            verbose=2,
+                            args=(self.n_cams, obs_3d_gt, obs_2d))
+        breakpoint()
+        # ---------- EVALUATE BA ----------
+        gt_projections = self.env.gt_projections
+        og_projections = self.env.projections
+        new_projections = res.x[:48].reshape((4, 3, 4))
 
-    def bundle_adjustment(self):
-        pass
+        def project(Ps, obs_3d):
+            obs_3d = np.vstack((obs_3d, np.ones((1, obs_3d.shape[1]))))             # add homo coords, (4, n_eval)
+            projected_2d = Ps @ obs_3d                                              # (n_cams, 3, 4) @ (4, n_eval) = (n_cams, 3, n_eval)
+            projected_2d = np.transpose(projected_2d, (2, 0, 1)).reshape(-1, 3)     # (n_eval * n_cams, 3). ordering of (2, 0, 1) is important to preserve proper interleaving
+            projected_2d = projected_2d / projected_2d[:, -1][:, np.newaxis]
+            projected_2d = projected_2d[:, :2]                                      # get rid of homo coords, (n_eval * n_cams, 2)
+            projected_2d = np.round(projected_2d)
+            return projected_2d
+        n_eval = 5
+        obs_3d = np.empty((3, n_eval), dtype=np.float32)
+        for i in range(n_eval):
+            imgs = self.read_cameras()
+            obs_3d[:, i] = self.env.feature_pt
 
+        gt_pred = project(gt_projections, obs_3d)
+        og_pred = project(og_projections, obs_3d)
+        new_pred = project(new_projections, obs_3d)
+        breakpoint()
+            
+
+class FakeMocap(BaseMocap):
+    def __init__(self, mocap_cfg, env_cfg):
+        self.env = TestEnv(env_cfg)
+        self.n_cams = self.env.n_cams
+        self.resolution = self.env.resolution
+
+        super().__init__(mocap_cfg)
+
+    def construct_intrinsics(self):
+        return self.env.intrinsics        
+    
+    def construct_extrinsics(self):
+        return self.env.extrinsics_wc
+    
+    def construct_projections(self):
+        return self.env.projections
+    
+    def read_cameras(self):
+        feature_pt = self.env.gen_random_pt()
+        while not self.env.pt_in_fovs(feature_pt) or not self.env.gen_imgs():
+            feature_pt = self.env.gen_random_pt()
+        self.env.render()
+        fake_imgs = self.env.fake_imgs
+        return fake_imgs
+    
     # ---------------------------- ARCHIVE ---------------------------
     # def calibrate_camera_poses(self, filename):
     #     """

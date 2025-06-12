@@ -3,7 +3,7 @@ pos:
   cam2: [10., 0., 0.]      # bottom right
   cam3: [10., 10., 0.]     # top right
   cam4: [0., 10., 0.]      # top left
-  std: 0.0
+  std: 2.0
 eulers:
   cam1: [0., 0., 45.]   
   cam2: [0., 0., 135.] 
