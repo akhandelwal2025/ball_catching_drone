@@ -61,34 +61,15 @@ class TestEnv():
             fy = self.cfg['intrinsics'][cam]['fy']
             ox = self.cfg['intrinsics'][cam]['ox'] 
             oy = self.cfg['intrinsics'][cam]['oy']
-            self.intrinsics[i, :, :] = np.array(
-                [
-                    [fx, 0., ox],
-                    [0., fy, oy],
-                    [0., 0., 1.]
-                ]
-            )
+            self.intrinsics[i, :, :] = utils.construct_intrinsics(fx, fy, ox, oy)
 
     def construct_projections(self):
         # construct for est cam locations first
         self.extrinsics_wc = np.empty((4, 3, 4))
         self.extrinsics_cw = np.empty((4, 3, 4))
         for i in range(self.n_cams):
-            R_cw = utils.generate_rotation_matrix_from_eulers(self.cam_eulers[i]) # body -> world, +x forward, +y left, +z up
-            R_wc = R_cw.T # world -> body
-            # need to transform to +x left, +y up, +z forward
-            # this ensures optical axis is aligned with +z enabling proper homogenous calculation
-            R_wc = np.array([
-                [0., 1., 0.,], 
-                [0., 0., 1.], 
-                [1., 0., 0.,]
-            ]) @ R_wc
-            t = -R_wc @ self.cam_pos[i][:, np.newaxis]
-            ext_wc = np.hstack((R_wc, t))
-            
-            # can't directly use R_cw here because R_wc includes a camera frame transform. 
-            # Therefore, to be completel correct, best to just do R_wc.T which includes that frame transform
-            ext_cw = np.hstack((R_wc.T, self.cam_pos[i][:, np.newaxis])) 
+            ext_wc, ext_cw = utils.construct_extrinsics(pos=self.cam_pos[i][:, np.newaxis],
+                                                        eulers=self.cam_eulers[i])
             self.extrinsics_wc[i, :, :] = ext_wc
             self.extrinsics_cw[i, :, :] = ext_cw
         self.projections = self.intrinsics @ self.extrinsics_wc
@@ -97,21 +78,8 @@ class TestEnv():
         self.gt_extrinsics_wc = np.empty((4, 3, 4))
         self.gt_extrinsics_cw = np.empty((4, 3, 4))
         for i in range(self.n_cams):
-            R_cw = utils.generate_rotation_matrix_from_eulers(self.gt_cam_eulers[i]) # body -> world, +x forward, +y left, +z up
-            R_wc = R_cw.T # world -> body
-            # need to transform to +x left, +y up, +z forward
-            # this ensures optical axis is aligned with +z enabling proper homogenous calculation
-            R_wc = np.array([
-                [0., 1., 0.,], 
-                [0., 0., 1.], 
-                [1., 0., 0.,]
-            ]) @ R_wc
-            t = -R_wc @ self.gt_cam_pos[i][:, np.newaxis]
-            ext_wc = np.hstack((R_wc, t))
-            
-            # can't directly use R_cw here because R_wc includes a camera frame transform. 
-            # Therefore, to be completel correct, best to just do R_wc.T which includes that frame transform
-            ext_cw = np.hstack((R_wc.T, self.gt_cam_pos[i][:, np.newaxis])) 
+            ext_wc, ext_cw = utils.construct_extrinsics(pos=self.gt_cam_pos[i][:, np.newaxis],
+                                                        eulers=self.gt_cam_eulers[i])
             self.gt_extrinsics_wc[i, :, :] = ext_wc
             self.gt_extrinsics_cw[i, :, :] = ext_cw
         self.gt_projections = self.intrinsics @ self.gt_extrinsics_wc

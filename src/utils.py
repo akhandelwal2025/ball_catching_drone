@@ -123,28 +123,75 @@ def DLT(pixels,
     X = X / X[-1]
     return X[:-1]
 
+def construct_intrinsics(fx, fy, ox, oy):
+    return np.array(
+        [
+            [fx, 0., ox],
+            [0., fy, oy],
+            [0., 0., 1.]
+        ]
+    )
+
+def construct_extrinsics(pos,
+                         eulers):
+    """
+    Construct extrinsic matrix given an input translation and eulers
+    Inputs:
+        pos: np.ndarray - translation vector. shape = (3, 1)
+        eulers: np.ndarray - eulers to be applied in XYZ. shape = (3, 1)
+    Output:
+        ext_wc - world to camera frame
+        ext_cw - camera to world frame
+    """
+    R_cw = generate_rotation_matrix_from_eulers(eulers) # body -> world, +x forward, +y left, +z up
+    R_wc = R_cw.T # world -> body
+    # need to transform to +x left, +y up, +z forward
+    # this ensures optical axis is aligned with +z enabling proper homogenous calculation
+    R_wc = np.array([
+        [0., 1., 0.,], 
+        [0., 0., 1.], 
+        [1., 0., 0.,]
+    ]) @ R_wc
+    t = -R_wc @ pos
+    ext_wc = np.hstack((R_wc, t))
+    
+    # can't directly use R_cw here because R_wc includes a camera frame transform. 
+    # Therefore, to be completel correct, best to just do R_wc.T which includes that frame transform
+    ext_cw = np.hstack((R_wc.T, pos))
+    return ext_wc, ext_cw
+
 def ba_calc_residuals(x: np.ndarray,
                       n_cams: int,
-                      obs_3d: np.ndarray,
+                      intrinsics: np.ndarray,
                       obs_2d: np.ndarray):
     """
     Calculate residuals between projected 3D points and 2D observations to be optimized using bundle adjustment.
     Format of this function is to follow the specification of method 'fun' outlined by scipy.optimize.least_squares (i.e.
     fun(x0, *args, **kwargs))
     Inputs:
-        x: np.ndarray - vector that will be optimized in the bundle adjustment process. should contain initial guess for camera projection matrices 
-                        + estimates for 3D points as calculated by DLT. Shape = (n_cams * 12 + n_obs * 3)
+        x: np.ndarray - vector that will be optimized in the bundle adjustment process. should contain initial guess for camera translation and eulers 
+                        + estimates for 3D points as calculated by DLT. shape = (n_cams * 6 + n_obs * 3)
         n_cams: int - number of cameras
+        intrinsics: np.ndarray - intrinsic matrix for each camera. shape = (n_cams, 3, 3)
         obs_2d: np.ndarray - matrix containing 2D pixel observations for each camera in each timestep. shape = (n_obs * n_cams, 2)
     Output:
         np.ndarray of shape (n,) where n is the number of total residuals = n_obs * n_cams * 2
         Note: the extra 2 is because there is a residual for each of the (u, v) in the observations
     """
     n_obs = obs_2d.shape[0] // n_cams
-    Ps = x.reshape((n_cams, 3, 4))
-    obs_3d = obs_3d.T
-    # Ps = x[:n_cams*12].reshape((n_cams, 3, 4))
-    # obs_3d = x[n_cams*12:].reshape(n_obs, 3).T                              # (3, n_obs)
+
+    # construct projection matrices
+    Ps = np.empty((n_cams, 3, 4))
+    for i in range(n_cams):
+        params = x[6*i:6*(i+1)]
+        pos = params[:3].reshape((3, 1))
+        eulers = params[3:6].reshape((3,))
+        ext_wc, _ = construct_extrinsics(pos, eulers)
+        intrinsic = intrinsics[i, :, :] 
+        Ps[i, :, :] = intrinsic @ ext_wc
+    
+    # calculate residuals
+    obs_3d = x[n_cams*6:].reshape(n_obs, 3).T                               # (3, n_obs)
     obs_3d = np.vstack((obs_3d, np.ones((1, obs_3d.shape[1]))))             # add homo coords, (4, n_obs)
     projected_2d = Ps @ obs_3d                                              # (n_cams, 3, 4) @ (4, n_obs) = (n_cams, 3, n_obs)
     projected_2d = np.transpose(projected_2d, (2, 0, 1)).reshape(-1, 3)     # (n_obs * n_cams, 3). ordering of (2, 0, 1) is important to preserve proper interleaving

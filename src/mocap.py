@@ -117,18 +117,40 @@ class BaseMocap(ABC):
         #                      obs_3d_og.flatten()))
         # x0_gt = np.concatenate((self.env.gt_projections.flatten(), 
         #                      obs_3d_gt.flatten()))
-        og_residuals = utils.ba_calc_residuals(self.env.projections.flatten(), self.n_cams, obs_3d_gt, obs_2d)
-        gt_residuals = utils.ba_calc_residuals(self.env.gt_projections.flatten(), self.n_cams, obs_3d_gt, obs_2d)
+        interleaved_og = np.empty((8, 3), dtype=np.float32)
+        interleaved_og[0::2] = self.env.cam_pos
+        interleaved_og[1::2] = self.env.cam_eulers
+
+        interleaved_gt = np.empty((8, 3), dtype=np.float32)
+        interleaved_gt[0::2] = self.env.gt_cam_pos
+        interleaved_gt[1::2] = self.env.gt_cam_eulers
+ 
+        x0_og = np.concatenate((interleaved_og.flatten(),
+                                obs_3d_og.flatten()))
+        x0_gt = np.concatenate((interleaved_gt.flatten(),
+                                obs_3d_gt.flatten()))
+        og_residuals = utils.ba_calc_residuals(x0_og, self.n_cams, self.intrinsics, obs_2d)
+        gt_residuals = utils.ba_calc_residuals(x0_gt, self.n_cams, self.intrinsics, obs_2d)
         breakpoint()
         res = least_squares(fun=utils.ba_calc_residuals,
-                            x0=self.env.projections.flatten(),
+                            x0=x0_og,
                             verbose=2,
-                            args=(self.n_cams, obs_3d_gt, obs_2d))
+                            xtol=1e-16,
+                            ftol=1e-16,
+                            args=(self.n_cams, self.intrinsics, obs_2d))
         breakpoint()
         # ---------- EVALUATE BA ----------
         gt_projections = self.env.gt_projections
         og_projections = self.env.projections
-        new_projections = res.x[:48].reshape((4, 3, 4))
+        new_projections = np.empty((self.n_cams, 3, 4))
+        for i in range(self.n_cams):
+            params = res.x[6*i:6*(i+1)]
+            pos = params[:3].reshape((3, 1))
+            eulers = params[3:6].reshape((3,))
+            ext_wc, _ = utils.construct_extrinsics(pos, eulers)
+            intrinsic = self.intrinsics[i, :, :] 
+            new_projections[i, :, :] = intrinsic @ ext_wc
+        # new_projections = res.x[:48].reshape((4, 3, 4))
 
         def project(Ps, obs_3d):
             obs_3d = np.vstack((obs_3d, np.ones((1, obs_3d.shape[1]))))             # add homo coords, (4, n_eval)
