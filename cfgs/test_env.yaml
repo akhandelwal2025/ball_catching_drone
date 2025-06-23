@@ -1,15 +1,15 @@
 pos:
-  cam1: [0., 0., 0.]       # bottom left
-  cam2: [10., 0., 0.]      # bottom right
-  cam3: [10., 10., 0.]     # top right
-  cam4: [0., 10., 0.]      # top left
-  std: 2.0
+  cam1: [0., 0., 10.]       # bottom left
+  cam2: [10., 0., 10.]      # bottom right
+  cam3: [10., 10., 10.]     # top right
+  cam4: [0., 10., 10.]      # top left
+  std: 0.5                # ft
 eulers:
   cam1: [0., 0., 45.]   
   cam2: [0., 0., 135.] 
   cam3: [0., 0., 225.] 
   cam4: [0., 0., 315.] 
-  std: 5                    # deg
+  std: 5                  # deg
 intrinsics:
   cam1:
     fx: 320.
@@ -32,7 +32,7 @@ intrinsics:
     ox: 320.
     oy: 240.
 use_lookat: True
-lookat: &pt [5., 5., -5.]
+lookat: &pt [5., 5., 5.]
 draw_FOV: True
 cam_FOV_half_angle: 30    # deg
 cone_length: 10.0

@@ -11,7 +11,7 @@ def main(args):
     with open(args.env_cfg, "r") as file:
         env_cfg = yaml.safe_load(file)
     mocap = FakeMocap(mocap_cfg, env_cfg)
-    mocap.bundle_adjustment(n_obs=20)
+    mocap.bundle_adjustment(n_obs=50)
     # ------------ OLD ------------ 
     # n_cams = mocap.n_cams
     # projections = mocap.projections

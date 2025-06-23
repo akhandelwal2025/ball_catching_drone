@@ -132,6 +132,76 @@ def construct_intrinsics(fx, fy, ox, oy):
         ]
     )
 
+def project_3d_to_2d(Ps, obs_3d):
+    """
+    Given a set of projection matrices and 3D points, project them onto the 2D image planes
+    Inputs:
+        Ps: np.ndarray - projection matrices. shape = (N, 3, 4)
+        obs_3d: np.ndarray - 3D points. shape = (N, 3)
+    Outputs:
+        2D points. shape = (N, 2)
+    """
+    obs_3d = obs_3d.T                                                       # (N, 3) -> (3, N)
+    obs_3d = np.vstack((obs_3d, np.ones((1, obs_3d.shape[1]))))             # add homo coords, (4, n_eval)
+    projected_2d = Ps @ obs_3d                                              # (n_cams, 3, 4) @ (4, n_eval) = (n_cams, 3, n_eval)
+    projected_2d = np.transpose(projected_2d, (2, 0, 1)).reshape(-1, 3)     # (n_eval * n_cams, 3). ordering of (2, 0, 1) is important to preserve proper interleaving
+    projected_2d = projected_2d / projected_2d[:, -1][:, np.newaxis]
+    projected_2d = projected_2d[:, :2]                                      # get rid of homo coords, (n_eval * n_cams, 2)
+    projected_2d = np.round(projected_2d)
+    return projected_2d
+
+def project_2d_to_3d(n_cams, Ps, obs_2d):
+    """
+    Given a set of projection matrices and 2D observation points for each camera, identify 3D points
+    Inputs:
+        n_cams: int - number of cams
+        Ps: np.ndarray - projection matrices. shape = (N, 3, 4)
+        obs_2d: np.ndarray - 2D image points. shape = (n_cams * N, 2). Each set of n_cams rows should represent the measurements of a single point
+    Outputs:
+        3D observation points. shape = (N, 3)
+    """
+    n_eval = obs_2d.shape[0] // n_cams
+    obs_3d = np.empty((n_eval, 3), dtype=np.float32)
+    for i in range(n_eval):
+        pixels = obs_2d[n_cams*i:n_cams*(i+1), :]
+        obs_3d[i] = DLT(pixels=pixels,
+                        projections=Ps)
+    return obs_3d
+
+def homogenize_Ps(Ps):
+    """
+    Given a set of projection matrices, make them into homogeneous projection matrices
+    Inputs:
+        Ps: np.ndarray - projection matrices. shape = (N, 3, 4)
+    Outputs:
+        homogenous projection matrices. shape = (N, 4, 4)
+    """
+    if len(Ps.shape) == 2:
+        Ps = Ps[np.newaxis, :, :]
+    N = Ps.shape[0]
+    Ps_homo = np.tile(np.eye(4), (N, 1, 1))
+    for i in range(N):
+        Ps_homo[i, :3, :3] = Ps[i, :3, :3]
+        Ps_homo[i, :3, 3] = Ps[i, :3, 3]
+    return Ps_homo.squeeze()
+
+def compose_Ps(A, B):
+    """
+    Given two projection matrices, compose their transformations
+    Inputs:
+        A: np.ndarray - projection matrix. shape = (N, 3, 4)
+        B: np.ndarray - projection matrix. shape = (N, 3, 4)
+    Outputs:
+        A @ B. composed transformation. shape = (N, 3, 4)
+    """
+    assert len(A.shape) == len(B.shape)
+    A_homo = homogenize_Ps(A)
+    B_homo = homogenize_Ps(B)
+    if len(A_homo.shape) == 2:
+        return (A_homo @ B_homo)[:3, :]
+    else:
+        return (A_homo @ B_homo)[:, :3, :]
+
 def construct_extrinsics(pos,
                          eulers):
     """
@@ -182,18 +252,31 @@ def ba_calc_residuals(x: np.ndarray,
 
     # construct projection matrices
     Ps = np.empty((n_cams, 3, 4))
-    for i in range(n_cams):
+    Ps[0] = intrinsics[0] @ np.hstack((np.eye(3), np.zeros((3, 1))))
+    for i in range(n_cams-1):
         params = x[6*i:6*(i+1)]
         pos = params[:3].reshape((3, 1))
-        eulers = params[3:6].reshape((3,))
-        ext_wc, _ = construct_extrinsics(pos, eulers)
-        intrinsic = intrinsics[i, :, :] 
-        Ps[i, :, :] = intrinsic @ ext_wc
+        rot_vec = params[3:6].reshape((3,))
+        rot_mtrx = R.from_rotvec(rot_vec).as_matrix()
+        ext_wc = np.hstack((rot_mtrx, pos))
+        # ext_wc, _ = construct_extrinsics(pos, eulers)
+        intrinsic = intrinsics[i+1, :, :] 
+        Ps[i+1, :, :] = intrinsic @ ext_wc
+
+    # # estimate 3d points given current estimate of projection matrices 
+    # obs_3d = x[n_cams*6:].reshape((n_obs, 3))
+
+    obs_3d = np.empty((n_obs, 3), dtype=np.float32)
+    for i in range(n_obs):
+        obs_3d[i] = DLT(pixels=obs_2d[n_cams*i:n_cams*(i+1)],
+                        projections=Ps)
+        # breakpoint()
     
     # calculate residuals
-    obs_3d = x[n_cams*6:].reshape(n_obs, 3).T                               # (3, n_obs)
+    obs_3d = obs_3d.T                                                       # (3, n_obs)
     obs_3d = np.vstack((obs_3d, np.ones((1, obs_3d.shape[1]))))             # add homo coords, (4, n_obs)
     projected_2d = Ps @ obs_3d                                              # (n_cams, 3, 4) @ (4, n_obs) = (n_cams, 3, n_obs)
+    # breakpoint()
     projected_2d = np.transpose(projected_2d, (2, 0, 1)).reshape(-1, 3)     # (n_obs * n_cams, 3). ordering of (2, 0, 1) is important to preserve proper interleaving
     projected_2d = projected_2d / projected_2d[:, -1][:, np.newaxis]
     projected_2d = projected_2d[:, :2]                                      # get rid of homo coords, (n_obs * n_cams, 2)

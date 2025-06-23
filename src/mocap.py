@@ -6,6 +6,7 @@ import time
 import src.utils as utils
 from src.env import TestEnv
 from scipy.optimize import least_squares
+from scipy.spatial.transform import Rotation as R
 
 class FakeCameras():
     def __init__(self,
@@ -26,9 +27,9 @@ class BaseMocap(ABC):
     def __init__(self, mocap_cfg):
         self.mocap_cfg = mocap_cfg
 
-        self.intrinsics = self.construct_intrinsics()
-        self.extrinsics = self.construct_extrinsics()
-        self.projections = self.construct_projections()
+        self.construct_intrinsics()
+        self.construct_extrinsics()
+        # self.construct_projections()
     
     @abstractmethod
     def construct_intrinsics(self):
@@ -102,75 +103,85 @@ class BaseMocap(ABC):
     # TODO basically copy paste of scripts/test_bundle_adjustment.py
     def bundle_adjustment(self, n_obs):
         obs_2d = np.empty((self.n_cams * n_obs, 2), dtype=int)
-        obs_3d_og = np.empty((n_obs, 3), dtype=np.float32)
-        obs_3d_gt = np.empty((n_obs, 3), dtype=np.float32)
         for i in range(n_obs):
             imgs = self.read_cameras()
             pixels = self.locate_centers(imgs, 
                                          num_centers=1, 
                                          lower=200,
-                                         upper=256).squeeze() 
-            obs_3d_og[i] = utils.DLT(pixels, self.projections)
-            obs_3d_gt[i] = utils.DLT(pixels, self.env.gt_projections)
+                                         upper=256).squeeze()
             obs_2d[self.n_cams*i:self.n_cams*(i+1)] = pixels
-        # x0_og = np.concatenate((self.projections.flatten(), 
-        #                      obs_3d_og.flatten()))
-        # x0_gt = np.concatenate((self.env.gt_projections.flatten(), 
-        #                      obs_3d_gt.flatten()))
-        interleaved_og = np.empty((8, 3), dtype=np.float32)
-        interleaved_og[0::2] = self.env.cam_pos
-        interleaved_og[1::2] = self.env.cam_eulers
-
-        interleaved_gt = np.empty((8, 3), dtype=np.float32)
-        interleaved_gt[0::2] = self.env.gt_cam_pos
-        interleaved_gt[1::2] = self.env.gt_cam_eulers
- 
-        x0_og = np.concatenate((interleaved_og.flatten(),
-                                obs_3d_og.flatten()))
-        x0_gt = np.concatenate((interleaved_gt.flatten(),
-                                obs_3d_gt.flatten()))
-        og_residuals = utils.ba_calc_residuals(x0_og, self.n_cams, self.intrinsics, obs_2d)
-        gt_residuals = utils.ba_calc_residuals(x0_gt, self.n_cams, self.intrinsics, obs_2d)
+        x0 = np.empty((self.n_cams*2, 3), dtype=np.float32)
+        x0[0::2] = self.ext_c1c[:, :3, 3].reshape((self.n_cams, 3))
+        x0[1::2] = R.from_matrix(self.ext_c1c[:, :3, :3]).as_rotvec()
+        # for i in range(self.n_cams):
+        #     ext_c1w = self.env.extrinsics_cw[0]
+        #     pos = x0[2*i, :].reshape((3, 1))
+        #     pos_homo = np.vstack((pos, [[1.]]))
+        #     print(self.env.cam_pos[i].reshape((3, 1)) - (ext_c1w @ pos_homo))
+        #     assert np.allclose(self.env.cam_pos[i].reshape((3, 1)), ext_c1w @ pos_homo, atol=1e-6), f"{self.env.cam_pos[i]}, {(ext_c1w @ pos_homo), (ext_c1w @ pos_homo).shape}"
+        breakpoint()
+        x0 = x0[2:] # get rid of first cam
+        res = utils.ba_calc_residuals(x0.flatten(), self.n_cams, self.intrinsics, obs_2d)
         breakpoint()
         res = least_squares(fun=utils.ba_calc_residuals,
-                            x0=x0_og,
+                            x0=x0.flatten(),
+                            # loss='huber',
+                            # f_scale=4.0,
+                            # ftol=2.2e-16,
+                            # xtol=2.2e-16,
                             verbose=2,
-                            xtol=1e-16,
-                            ftol=1e-16,
                             args=(self.n_cams, self.intrinsics, obs_2d))
-        breakpoint()
+    
         # ---------- EVALUATE BA ----------
         gt_projections = self.env.gt_projections
         og_projections = self.env.projections
         new_projections = np.empty((self.n_cams, 3, 4))
+        ext_wc1 = self.env.gt_extrinsics_wc[0]     
         for i in range(self.n_cams):
-            params = res.x[6*i:6*(i+1)]
-            pos = params[:3].reshape((3, 1))
-            eulers = params[3:6].reshape((3,))
-            ext_wc, _ = utils.construct_extrinsics(pos, eulers)
-            intrinsic = self.intrinsics[i, :, :] 
-            new_projections[i, :, :] = intrinsic @ ext_wc
-        # new_projections = res.x[:48].reshape((4, 3, 4))
-
-        def project(Ps, obs_3d):
-            obs_3d = np.vstack((obs_3d, np.ones((1, obs_3d.shape[1]))))             # add homo coords, (4, n_eval)
-            projected_2d = Ps @ obs_3d                                              # (n_cams, 3, 4) @ (4, n_eval) = (n_cams, 3, n_eval)
-            projected_2d = np.transpose(projected_2d, (2, 0, 1)).reshape(-1, 3)     # (n_eval * n_cams, 3). ordering of (2, 0, 1) is important to preserve proper interleaving
-            projected_2d = projected_2d / projected_2d[:, -1][:, np.newaxis]
-            projected_2d = projected_2d[:, :2]                                      # get rid of homo coords, (n_eval * n_cams, 2)
-            projected_2d = np.round(projected_2d)
-            return projected_2d
-        n_eval = 5
+            if i == 0:
+                new_projections[0] = self.intrinsics[0] @ ext_wc1
+            else:
+                params = res.x[6*(i-1):6*i]
+                pos = params[:3].reshape((3, 1))
+                rot_vec = params[3:6].reshape((3,))
+                rot_mtrx = R.from_rotvec(rot_vec).as_matrix()
+                ext_c1c = np.hstack((rot_mtrx, pos))
+                intrinsic = self.intrinsics[i, :, :]
+                new_projections[i, :, :] = intrinsic @ utils.compose_Ps(ext_c1c, ext_wc1) 
+        n_eval = 10
+        obs_2d = np.empty((self.n_cams * n_eval, 2), dtype=int)
         obs_3d = np.empty((3, n_eval), dtype=np.float32)
         for i in range(n_eval):
             imgs = self.read_cameras()
-            obs_3d[:, i] = self.env.feature_pt
-
-        gt_pred = project(gt_projections, obs_3d)
-        og_pred = project(og_projections, obs_3d)
-        new_pred = project(new_projections, obs_3d)
+            pixels = self.locate_centers(imgs, 
+                                            num_centers=1, 
+                                            lower=200,
+                                            upper=256).squeeze()
+            obs_2d[self.n_cams*i:self.n_cams*(i+1)] = pixels
+        gt_pred = utils.project_2d_to_3d(self.n_cams, gt_projections, obs_2d)
+        og_pred = utils.project_2d_to_3d(self.n_cams, og_projections, obs_2d)
+        new_pred = utils.project_2d_to_3d(self.n_cams, new_projections, obs_2d)
+        print(f"L2-norm(gt_pred - new_pred): {np.linalg.norm(gt_pred - new_pred, axis=1)}")
+        print(f"L2-norm(gt_pred vs og_pred): {np.linalg.norm(gt_pred - og_pred, axis=1)}")
         breakpoint()
-            
+        pos = np.empty((self.n_cams, 3))
+        eulers = np.empty((self.n_cams, 3))
+        for i in range(self.n_cams):
+            ext = np.linalg.inv(self.intrinsics[i]) @ new_projections[i]
+            R_wc = ext[:, :3]
+            t_wc = ext[:, 3].reshape(3, 1)
+            R_cw = R_wc.T
+            t_cw = -R_cw @ t_wc
+            pos[i] = t_cw.flatten()
+            eulers[i] = R.from_matrix(R_cw).as_euler('xyz', degrees=False)
+        self.env.cam_pos = pos
+        self.env_cam_eulers = eulers
+        self.env.render()
+        breakpoint()
+        # self.env.cam_pos = new_projections[:, :3, 3].reshape((self.n_cams, 3))
+        # self.env.cam_eulers = R.from_matrix(new_projections[:, :3, :3].reshape((self.n_cams, 3, 3))).as_euler('xyz', degrees=False)
+        # self.env.render()
+        # breakpoint()
 
 class FakeMocap(BaseMocap):
     def __init__(self, mocap_cfg, env_cfg):
@@ -181,13 +192,71 @@ class FakeMocap(BaseMocap):
         super().__init__(mocap_cfg)
 
     def construct_intrinsics(self):
-        return self.env.intrinsics        
+        self.intrinsics = self.env.intrinsics        
     
     def construct_extrinsics(self):
-        return self.env.extrinsics_wc
+        # env.extrinsics are going to be in world frame
+        # want to guaruntee that cam1 is the origin of the mocap frame
+        # therefore, compose pose_fix as inverse of cam1 world extrinsics and multiply all other cams
+        # to ensure all camera frames are relative to cam1 origin
+        self.ext_cc1, self.ext_c1c = self.to_cam1(self.env.extrinsics_wc, self.env.extrinsics_cw)
+        # pos_homo = np.vstack((self.env.cam_pos.T, np.ones((1, self.n_cams))))
+        # ext_wc1_homo = utils.homogenize_Ps(self.env.extrinsics_wc[0])
+        # ext_c1w_homo = utils.homogenize_Ps(self.env.extrinsics_cw[0])
+        # for i in range(4):
+        #     print(self.ext_c1c[i] @ ext_wc1_homo @ pos_homo[:, i])
+        #     assert np.allclose(self.ext_c1c[i] @ ext_wc1_homo @ pos_homo[:, i], np.zeros((3, 1)))
+        # for i in range(4):
+        #     print(self.env.extrinsics_cw[0] @ utils.homogenize_Ps(self.ext_cc1[i]) @ np.array([0., 0., 0., 1.]).reshape((4, 1)))
+        #     # assert np.allclose(self.env.extrinsics_cw[0] @ utils.homogenize_Ps(self.ext_cc1[i]) @ np.array([0., 0., 0., 1.]).reshape((4, 1)), 
+        #     #                    self.env.cam_pos[i])
+
+        breakpoint()
+        # ext_homo = utils.homogenize_Ps(ext)
+        # pose_fix_inv_homo = utils.homogenize_Ps(self.pose_fix_inv)
+        # for i in range(4):
+        #     assert np.allclose(self.env.extrinsics_wc[i], (pose_fix_inv_homo @ ext_homo[i])[:3, :])
+        #     print(f"------------ cam{i} ------------")
+        #     print(self.env.extrinsics_wc[i])
+        #     print((self.pose_fix_inv @ ext_homo[i])[:3, :])
+        # return ext
+    
+    def to_cam1(self, extrinsics_wc, extrinsics_cw):
+        """
+        Given a set of extrinsics defined in a world frame, transform all extrinsics to be relative to cam1
+        with this transformation, the first extrinsic matrix that results will be of the form [I|0]
+        Inputs:
+            extrinsics_wc: np.ndarray - world -> camera extrinsics. shape = (N, 3, 4)
+            extrinsics_cw: np.ndarray - camera -> world extrinsics. shape = (N, 3, 4)
+        Returns:
+            ext_cc1, cam_i to cam_1. shape = (N, 3, 4)
+            ext_c1c, cam_1 to cam_i. shape = (N, 3, 4)
+            In both cases, first matrix will be of the form [I|0]
+        """
+        ext_wc1 = np.tile(extrinsics_wc[0], (self.n_cams, 1, 1))
+        ext_c1w = np.tile(extrinsics_cw[0], (self.n_cams, 1, 1))
+        ext_cc1 = utils.compose_Ps(ext_wc1, extrinsics_cw)
+        ext_c1c = utils.compose_Ps(extrinsics_wc, ext_c1w)
+        # ext_cc1 = ext_wc1 @ extrinsics_cw
+        # ext_c1c = extrinsics_wc @ ext_c1w
+        return ext_cc1, ext_c1c
+
+        # --------- ARCHIVE, COMPLETE NONSENSE ---------
+        # transformed_ext = np.empty((self.n_cams, 3, 4), dtype=np.float32)
+        # pose_fix_R = extrinsics[0][:, :3].T
+        # t = extrinsics[0][:3, 3][:, np.newaxis]
+        # pose_fix_t = -pose_fix_R @ t
+        # pose_fix = np.hstack((pose_fix_R, pose_fix_t))
+        # pose_fix_homo = utils.homogenize_Ps(pose_fix) 
+        # pose_fix_inv = np.hstack((pose_fix_R.T, t))
+        # breakpoint()
+        # for i in range(self.n_cams):
+        #     ext_i_homo = utils.homogenize_Ps(extrinsics[i])
+        #     transformed_ext[i] = (pose_fix_homo @ ext_i_homo)[:3, :]
+        # return transformed_ext, pose_fix, pose_fix_inv
     
     def construct_projections(self):
-        return self.env.projections
+        self.projections = self.intrinsics @ self.extrinsics
     
     def read_cameras(self):
         feature_pt = self.env.gen_random_pt()
