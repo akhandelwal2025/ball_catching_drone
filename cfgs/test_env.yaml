@@ -3,13 +3,13 @@ pos:
   cam2: [10., 0., 10.]      # bottom right
   cam3: [10., 10., 10.]     # top right
   cam4: [0., 10., 10.]      # top left
-  std: 0.5                # ft
+  std: 0.1                # ft
 eulers:
   cam1: [0., 0., 45.]   
   cam2: [0., 0., 135.] 
   cam3: [0., 0., 225.] 
   cam4: [0., 0., 315.] 
-  std: 5                  # deg
+  std: 0                  # deg
 intrinsics:
   cam1:
     fx: 320.
@@ -38,5 +38,5 @@ cam_FOV_half_angle: 30    # deg
 cone_length: 10.0
 point_gen:
   center: *pt
-  radius: 4.0               # m
+  radius: 5.0               # m
 img_resolution: [640, 480]  # width, height

@@ -32,7 +32,7 @@ def main(args):
         
 if __name__ == "__main__":
     np.set_printoptions(threshold=np.inf)
-
+    np.set_printoptions(precision=3, suppress=True)
     parser = argparse.ArgumentParser(description='Description of your program')
     parser.add_argument('--mocap_cfg', type=str, default='cfgs/mocap.yaml')
     parser.add_argument('--env_cfg', type=str, default='cfgs/test_env.yaml')
