@@ -19,7 +19,7 @@ def extract_eulers_from_rotation_matrix_XYZ(rot_mtrx):
     # breakpoint()
     # assert np.allclose(R.from_matrix(rot_mtrx).as_euler('xyz'), eulers)
     # return eulers
-    return R.from_matrix(rot_mtrx).as_euler('xyz')
+    return R.from_matrix(rot_mtrx).as_euler('XYZ')
 
 def lookat(origin, target, up, return_eulers=True):
     """
@@ -52,11 +52,11 @@ def lookat(origin, target, up, return_eulers=True):
     
 def generate_rotation_matrix_from_eulers(eulers):
     """
-    Given euler angles, generate rotation matrix using XYZ rotation
+    Given euler angles, generate rotation matrix using ZYX intrinsic rotation
     Inputs:
         eulers: list of euler angles
     Output:
-        np.ndarray, shape=(3,3) representing XYZ rotation
+        np.ndarray, shape=(3,3) representing ZYX rotation
     """
     x, y, z = eulers[0], eulers[1], eulers[2]
     calc = np.array([
@@ -72,7 +72,7 @@ def generate_rotation_matrix_from_eulers(eulers):
         [0., c(x), -s(x)],
         [0., s(x), c(x)]
     ])
-    assert np.allclose(calc, R.from_euler('xyz', eulers).as_matrix())
+    assert np.allclose(calc, R.from_euler('ZYX', eulers).as_matrix()), f"\n{calc}\n{R.from_euler('ZYX', eulers).as_matrix()}"
     return calc
 
 def eight_point_algorithm(left_frame_pts,
@@ -112,6 +112,7 @@ def DLT(pixels,
         3-element np.ndarray representing best guess for triangulated 3D point  
     """
     # vectorized creation of A - kinda overkill for four cams, but good numpy practice lol
+    print(pixels.shape)
     N = pixels.shape[0]
     row1 = pixels[:, 1][:, np.newaxis] * projections[:, 2, :] - projections[:, 1, :] # vP_2 - P_1
     row2 = projections[:, 0, :] - pixels[:, 0][:, np.newaxis] * projections[:, 2, :] # P_0 - uP_2
@@ -217,10 +218,15 @@ def construct_extrinsics(pos,
     R_wc = R_cw.T # world -> body
     # need to transform to +x left, +y up, +z forward
     # this ensures optical axis is aligned with +z enabling proper homogenous calculation
+    # R_wc = np.array([
+    #     [0., 1., 0.,], 
+    #     [0., 0., 1.], 
+    #     [1., 0., 0.,]
+    # ]) @ R_wc
     R_wc = np.array([
-        [0., 1., 0.,], 
-        [0., 0., 1.], 
-        [1., 0., 0.,]
+        [0., 0., 1.,], 
+        [1., 0., 0.], 
+        [0., 1., 0.,]
     ]) @ R_wc
     t = -R_wc @ pos
     ext_wc = np.hstack((R_wc, t))

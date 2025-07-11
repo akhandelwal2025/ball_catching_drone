@@ -27,7 +27,9 @@ class FakeCameras():
 class BaseMocap(ABC):
     def __init__(self, mocap_cfg):
         self.mocap_cfg = mocap_cfg
-        self.vis = Vis(self.mocap_cfg)
+        self.vis = Vis(self.mocap_cfg,
+                       self.cam_pos,
+                       self.cam_eulers)
 
         self.construct_intrinsics()
         self.construct_extrinsics_wf()
@@ -99,24 +101,28 @@ class BaseMocap(ABC):
             upper: List[int] - upper bound of values to use to create mask
         """
         num_imgs = imgs.shape[0]
-        centers = np.full((num_imgs, num_centers, 2), -1)
+        centers = np.zeros((num_imgs, num_centers, 2), dtype=np.float32)
         for i in range(num_imgs):
             img = imgs[i]
+            # print("img.shape:", img.shape, "img.dtype:", img.dtype)
+            # print("lower:", lower, "shape:", np.array(lower).shape, "dtype:", np.array(lower).dtype)
+            # print("upper:", upper, "shape:", np.array(upper).shape, "dtype:", np.array(upper).dtype)\
             mask = cv2.inRange(img, lower, upper)
             if not self.mocap_cfg['use_fake_imgs']:
-                mask = cv2.erode(mask, None, iterations=2)
+                # mask = cv2.erode(mask, None, iterations=2)
                 mask = cv2.dilate(mask, None, iterations=2)
             contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
             contours = list(contours)
-            if len(contours) < num_centers:
-                return None
             contours.sort(key=cv2.contourArea, reverse=True) # assumption is that dots are the biggest thing in the img
-            contours = contours[:num_centers]
+            contours = contours[:min(len(contours), num_centers)]
             img_centers = []
-            for c in contours:
-                M = cv2.moments(c)
-                img_centers.append([int(M["m10"] / M["m00"]), int(M["m01"] / M["m00"])])
-            centers[i] = img_centers
+            for c in range(num_centers):
+                if c < len(contours):
+                    M = cv2.moments(contours[c])
+                    if M['m00'] != 0:
+                        img_centers.append([(M["m10"] / M["m00"]), (M["m01"] / M["m00"])])
+            if len(img_centers) != 0:
+                centers[i, :len(img_centers), :] = img_centers
         return centers
     
     def bundle_adjustment(self, n_obs):
@@ -249,19 +255,26 @@ class FakeMocap(BaseMocap):
 
 class PsEyeMocap(BaseMocap):
     def __init__(self, mocap_cfg):
-        self.c = Camera(mocap_cfg['pseyepy_params'])
         self.n_cams = mocap_cfg['n_cams']
-        self.resolution = (320, 240) if mocap_cfg['pseyepy_params']['resolution'] == 'small' else (640, 480)
+        if mocap_cfg['pseyepy_params']['resolution'] == 'small':
+            self.resolution = (320, 240)
+            mocap_cfg['pseyepy_params']['resolution'] = Camera.RES_SMALL
+        else:
+            self.resolution = (640, 480)
+            mocap_cfg['pseyepy_params']['resolution'] = Camera.RES_LARGE
+        # self.c = Camera(**mocap_cfg['pseyepy_params'])
 
-        self.cam_pos = np.stack([self.mocap_cfg['pos']['cam1'],
-                                 self.mocap_cfg['pos']['cam2'],
-                                 self.mocap_cfg['pos']['cam3'],
-                                 self.mocap_cfg['pos']['cam4']], axis=0)
-        self.cam_eulers = np.stack([self.mocap_cfg['eulers']['cam1'],
-                                    self.mocap_cfg['eulers']['cam2'],
-                                    self.mocap_cfg['eulers']['cam3'],
-                                    self.mocap_cfg['eulers']['cam4']], axis=0)
+        self.cam_pos = np.stack([mocap_cfg['pos']['cam1'],
+                                 mocap_cfg['pos']['cam2'],
+                                 mocap_cfg['pos']['cam3'],
+                                 mocap_cfg['pos']['cam4']], axis=0)
+        self.cam_eulers = np.stack([mocap_cfg['eulers']['cam1'],
+                                    mocap_cfg['eulers']['cam2'],
+                                    mocap_cfg['eulers']['cam3'],
+                                    mocap_cfg['eulers']['cam4']], axis=0)
+        self.cam_eulers = np.radians(self.cam_eulers)
         super().__init__(mocap_cfg)
+        breakpoint()
 
     def construct_intrinsics(self):
         self.intrinsics = np.empty((4, 3, 3))
@@ -289,13 +302,11 @@ class PsEyeMocap(BaseMocap):
         self.projections_c1f = self.intrinsics @ self.extrinsics_c1c
     
     def read_cameras(self):
-        self.imgs, timesteps = self.c.read()
+        imgs, timesteps = self.c.read()
+        self.imgs = np.array(imgs)
         return self.imgs
     
     def render(self,
-               feature_pts):
-        self.vis.render(imgs=self.imgs,
-                        frames3d={
-                            'red': (self.cam_pos, self.cam_eulers, True)
-                        },
-                        feature_pts=feature_pts)
+               centers = None,
+               feature_pts = None):
+        self.vis.render()
