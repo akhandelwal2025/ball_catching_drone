@@ -262,7 +262,7 @@ class PsEyeMocap(BaseMocap):
         else:
             self.resolution = (640, 480)
             mocap_cfg['pseyepy_params']['resolution'] = Camera.RES_LARGE
-        # self.c = Camera(**mocap_cfg['pseyepy_params'])
+        self.c = Camera(**mocap_cfg['pseyepy_params'])
 
         self.cam_pos = np.stack([mocap_cfg['pos']['cam1'],
                                  mocap_cfg['pos']['cam2'],

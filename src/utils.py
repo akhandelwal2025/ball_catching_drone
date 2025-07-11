@@ -72,7 +72,7 @@ def generate_rotation_matrix_from_eulers(eulers):
         [0., c(x), -s(x)],
         [0., s(x), c(x)]
     ])
-    assert np.allclose(calc, R.from_euler('ZYX', eulers).as_matrix()), f"\n{calc}\n{R.from_euler('ZYX', eulers).as_matrix()}"
+    assert np.allclose(calc, R.from_euler('ZYX', [z, y, x]).as_matrix()), f"\n{calc}\n{R.from_euler('ZYX', eulers).as_matrix()}"
     return calc
 
 def eight_point_algorithm(left_frame_pts,
