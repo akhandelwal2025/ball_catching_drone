@@ -218,16 +218,16 @@ def construct_extrinsics(pos,
     R_wc = R_cw.T # world -> body
     # need to transform to +x left, +y up, +z forward
     # this ensures optical axis is aligned with +z enabling proper homogenous calculation
-    # R_wc = np.array([
-    #     [0., 1., 0.,], 
-    #     [0., 0., 1.], 
-    #     [1., 0., 0.,]
-    # ]) @ R_wc
     R_wc = np.array([
-        [0., 0., 1.,], 
-        [1., 0., 0.], 
-        [0., 1., 0.,]
+        [0., 1., 0.,], 
+        [0., 0., 1.], 
+        [1., 0., 0.,]
     ]) @ R_wc
+    # R_wc = np.array([
+    #     [0., 0., 1.,], 
+    #     [1., 0., 0.], 
+    #     [0., 1., 0.,]
+    # ]) @ R_wc
     t = -R_wc @ pos
     ext_wc = np.hstack((R_wc, t))
     
