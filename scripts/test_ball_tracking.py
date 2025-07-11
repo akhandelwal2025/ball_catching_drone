@@ -39,6 +39,7 @@ def main(args):
             # frames += 1
             for i in range(len(imgs)):
                 img = imgs[i]
+                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
                 center = centers[i]
                 dot = cv2.circle(img, (int(center[0]), int(center[1])), radius=3, color=[0, 0, 255])
                 cv2.imshow(f"Cam {i+1}", dot)
