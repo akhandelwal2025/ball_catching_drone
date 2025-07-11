@@ -19,7 +19,7 @@ def extract_eulers_from_rotation_matrix_XYZ(rot_mtrx):
     # breakpoint()
     # assert np.allclose(R.from_matrix(rot_mtrx).as_euler('xyz'), eulers)
     # return eulers
-    return R.from_matrix(rot_mtrx).as_euler('xyz')
+    return R.from_matrix(rot_mtrx).as_euler('XYZ')
 
 def lookat(origin, target, up, return_eulers=True):
     """
@@ -112,6 +112,7 @@ def DLT(pixels,
         3-element np.ndarray representing best guess for triangulated 3D point  
     """
     # vectorized creation of A - kinda overkill for four cams, but good numpy practice lol
+    print(pixels.shape)
     N = pixels.shape[0]
     row1 = pixels[:, 1][:, np.newaxis] * projections[:, 2, :] - projections[:, 1, :] # vP_2 - P_1
     row2 = projections[:, 0, :] - pixels[:, 0][:, np.newaxis] * projections[:, 2, :] # P_0 - uP_2
@@ -217,10 +218,15 @@ def construct_extrinsics(pos,
     R_wc = R_cw.T # world -> body
     # need to transform to +x left, +y up, +z forward
     # this ensures optical axis is aligned with +z enabling proper homogenous calculation
+    # R_wc = np.array([
+    #     [0., 1., 0.,], 
+    #     [0., 0., 1.], 
+    #     [1., 0., 0.,]
+    # ]) @ R_wc
     R_wc = np.array([
-        [0., 1., 0.,], 
-        [0., 0., 1.], 
-        [1., 0., 0.,]
+        [0., 0., 1.,], 
+        [1., 0., 0.], 
+        [0., 1., 0.,]
     ]) @ R_wc
     t = -R_wc @ pos
     ext_wc = np.hstack((R_wc, t))

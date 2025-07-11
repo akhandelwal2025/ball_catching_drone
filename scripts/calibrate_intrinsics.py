@@ -4,11 +4,11 @@ import sys
 import keyboard
 import numpy as np
 
-def calibrate(c):
+def calibrate(c, save_file):
     # Define the checkerboard size (number of inner corners per row and column)
     # For a checkerboard with 9x6 squares, there are 8x5 internal corners
     checkerboard_size = (8, 6)
-    square_size = 1.  # inches
+    square_size = 0.0254  # m
     objp = np.zeros((checkerboard_size[0]*checkerboard_size[1], 3), np.float32)
     objp[:, :2] = np.mgrid[0:checkerboard_size[0], 0:checkerboard_size[1]].T.reshape(-1, 2)
     objp *= square_size
@@ -61,11 +61,15 @@ def calibrate(c):
         imgpoints2, _ = cv2.projectPoints(objpoints[i], rvecs[i], tvecs[i], K, dist)
         error = cv2.norm(imgpoints[i], imgpoints2, cv2.NORM_L2) / len(imgpoints2)
         mean_error += error
-
     print("Total reprojection error:", mean_error / len(objpoints))
+
+    np.savez(save_file, intrinsics=K, distortion_coeffs=dist)
+
 if __name__ == "__main__":
     c = Camera(fps=150, 
                 resolution=Camera.RES_SMALL,
                 gain=63,
                 exposure=255)
-    imgs = calibrate(c)
+    save_file = input("Filename to save intrinsic matrix under: ")
+    print(f"Saving under {save_file}")
+    imgs = calibrate(c, save_file)
