@@ -52,11 +52,11 @@ def lookat(origin, target, up, return_eulers=True):
     
 def generate_rotation_matrix_from_eulers(eulers):
     """
-    Given euler angles, generate rotation matrix using XYZ rotation
+    Given euler angles, generate rotation matrix using ZYX intrinsic rotation
     Inputs:
         eulers: list of euler angles
     Output:
-        np.ndarray, shape=(3,3) representing XYZ rotation
+        np.ndarray, shape=(3,3) representing ZYX rotation
     """
     x, y, z = eulers[0], eulers[1], eulers[2]
     calc = np.array([
@@ -72,7 +72,7 @@ def generate_rotation_matrix_from_eulers(eulers):
         [0., c(x), -s(x)],
         [0., s(x), c(x)]
     ])
-    assert np.allclose(calc, R.from_euler('xyz', eulers).as_matrix())
+    assert np.allclose(calc, R.from_euler('ZYX', [z, y, x]).as_matrix()), f"\n{calc}\n{R.from_euler('ZYX', eulers).as_matrix()}"
     return calc
 
 def eight_point_algorithm(left_frame_pts,

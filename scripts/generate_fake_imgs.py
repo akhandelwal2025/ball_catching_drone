@@ -18,8 +18,8 @@ def main(args):
     i = 0
     while i < args.num_timesteps:
         feature_pt = env.gen_random_pt()
+        env.render()
         if env.pt_in_fovs(feature_pt) and env.gen_imgs():
-            env.render()
             fake_imgs[i, ...] = env.fake_imgs
             pts_2d[i, :, :] = env.projected_pts
             pts_3d[i, :] = env.feature_pt

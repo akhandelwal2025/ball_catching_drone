@@ -1,42 +1,42 @@
 pos:
-  cam1: [0., 0., 10.]       # bottom left
-  cam2: [10., 0., 10.]      # bottom right
-  cam3: [10., 10., 10.]     # top right
-  cam4: [0., 10., 10.]      # top left
-  std: 0.5                # ft
+  cam1: [0., 0., 2.4]       
+  cam2: [0., 3.368, 2.4]    
+  cam3: [3.39, 3.368, 2.4]   
+  cam4: [3.39, 0., 2.4] 
+  std: 0.0                # ft
 eulers:
-  cam1: [0., 0., 45.]   
-  cam2: [0., 0., 135.] 
-  cam3: [0., 0., 225.] 
-  cam4: [0., 0., 315.] 
-  std: 5                  # deg
+  cam1: [0., 25., 45.]
+  cam2: [0., 25., 315.]
+  cam3: [0., 25., 225.]
+  cam4: [0., 25., 135.]
+  std: 0                 # deg
 intrinsics:
   cam1:
-    fx: 320.
-    fy: 320.
-    ox: 320.
-    oy: 240.
+    fx: 427.49833394
+    fy: 429.59644814
+    ox: 153.25864636
+    oy: 104.52997788
   cam2:
-    fx: 320.
-    fy: 320.
-    ox: 320.
-    oy: 240.
+    fx: 432.00849678
+    fy: 433.00673108
+    ox: 127.88661546
+    oy: 114.51382609
   cam3:
-    fx: 320.
-    fy: 320.
-    ox: 320.
-    oy: 240.
+    fx: 427.92998826
+    fy: 429.16645481
+    ox: 165.92273089
+    oy: 98.50794592
   cam4:
-    fx: 320.
-    fy: 320.
-    ox: 320.
-    oy: 240.
-use_lookat: True
-lookat: &pt [5., 5., 5.]
+    fx: 436.81396895
+    fy: 438.00785773
+    ox: 135.08559193
+    oy: 97.65055259
+use_lookat: False
+lookat: &pt [1.5, 1.5, 1.]
 draw_FOV: True
 cam_FOV_half_angle: 30    # deg
 cone_length: 10.0
 point_gen:
   center: *pt
-  radius: 4.0               # m
+  radius: 0.0               # m
 img_resolution: [640, 480]  # width, height
