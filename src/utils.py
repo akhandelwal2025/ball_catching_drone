@@ -112,7 +112,6 @@ def DLT(pixels,
         3-element np.ndarray representing best guess for triangulated 3D point  
     """
     # vectorized creation of A - kinda overkill for four cams, but good numpy practice lol
-    print(pixels.shape)
     N = pixels.shape[0]
     row1 = pixels[:, 1][:, np.newaxis] * projections[:, 2, :] - projections[:, 1, :] # vP_2 - P_1
     row2 = projections[:, 0, :] - pixels[:, 0][:, np.newaxis] * projections[:, 2, :] # P_0 - uP_2
@@ -258,17 +257,18 @@ def ba_calc_residuals(x: np.ndarray,
 
     # construct projection matrices
     Ps = np.empty((n_cams, 3, 4))
-    Ps[0] = intrinsics[0] @ np.hstack((np.eye(3), np.zeros((3, 1))))
-    for i in range(n_cams-1):
+    # Ps[0] = intrinsics[0] @ np.hstack((np.eye(3), np.zeros((3, 1))))
+    for i in range(n_cams):
         params = x[6*i:6*(i+1)]
         pos = params[:3].reshape((3, 1))
         rot_vec = params[3:6].reshape((3,))
         rot_mtrx = R.from_rotvec(rot_vec).as_matrix()
         ext_wc = np.hstack((rot_mtrx, pos))
         # ext_wc, _ = construct_extrinsics(pos, eulers)
-        intrinsic = intrinsics[i+1, :, :] 
-        Ps[i+1, :, :] = intrinsic @ ext_wc
-
+        intrinsic = intrinsics[i, :, :] 
+        Ps[i, :, :] = intrinsic @ ext_wc
+    # print("in residuals:")
+    # print(Ps)
     # # estimate 3d points given current estimate of projection matrices 
     # obs_3d = x[n_cams*6:].reshape((n_obs, 3))
 

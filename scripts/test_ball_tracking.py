@@ -19,7 +19,21 @@ def main(args):
     start = time.time()
     frames = 0
     track_ball_time = 0
+    calibration = np.zeros((1000, 3))
     try:
+        # calibration routine
+        for i in range(1000):
+            imgs = mocap.read_cameras()
+            imgs = imgs.copy()
+            centers = mocap.locate_centers(imgs=imgs,
+                                           num_centers=1,
+                                           lower=LOWER,
+                                           upper=UPPER)
+            centers = centers.reshape((centers.shape[0] * centers.shape[1], centers.shape[2]))
+            pt_3d = utils.DLT(centers, mocap.projections_wf)
+            calibration[i] = pt_3d
+        calibration = calibration.mean(axis=0)
+        print(f"finished calibration. offset = {calibration} ")
         while True:
             iter_start = time.time()
             # img = mocap.read_cameras()[np.newaxis, :, :]
@@ -33,7 +47,7 @@ def main(args):
             print(centers, centers.shape)
             iter_end = time.time()
             track_ball_time += iter_end - iter_start
-            pt_3d = utils.DLT(centers, mocap.projections_wf)
+            pt_3d = utils.DLT(centers, mocap.projections_wf) - calibration
             print(pt_3d)
             mocap.render()
             # frames += 1

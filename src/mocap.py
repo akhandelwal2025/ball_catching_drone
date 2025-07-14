@@ -141,7 +141,7 @@ class BaseMocap(ABC):
         res = utils.ba_calc_residuals(x0.flatten(), self.n_cams, self.intrinsics, obs_2d)
         res = least_squares(fun=utils.ba_calc_residuals,
                             x0=x0.flatten(),
-                            # loss='huber',
+                            loss='huber',
                             # f_scale=4.0,
                             # jac='3-point',
                             # x_scale='jac',
@@ -149,67 +149,68 @@ class BaseMocap(ABC):
                             # xtol=2.2e-16,c
                             verbose=2,
                             args=(self.n_cams, self.intrinsics, obs_2d))
+        
         # ---------- EVALUATE BA ----------
-        gt_projections = self.env.gt_projections
-        og_projections = self.env.projections
-        new_projections = np.empty((self.n_cams, 3, 4))
-        ext_wc1 = self.env.gt_extrinsics_wc[0]     
-        for i in range(self.n_cams):
-            if i == 0:
-                new_projections[0] = self.intrinsics[0] @ ext_wc1
-            else:
-                params = res.x[6*(i-1):6*i]
-                pos = params[:3].reshape((3, 1))
-                rot_vec = params[3:6].reshape((3,))
-                rot_mtrx = R.from_rotvec(rot_vec).as_matrix()
-                ext_c1c = np.hstack((rot_mtrx, pos))
-                intrinsic = self.intrinsics[i, :, :]
-                new_projections[i, :, :] = intrinsic @ utils.compose_Ps(ext_c1c, ext_wc1) 
-        n_eval = 10
-        obs_2d = np.empty((self.n_cams * n_eval, 2), dtype=int)
-        obs_3d = np.empty((n_eval, 3), dtype=np.float32)
-        for i in range(n_eval):
-            imgs = self.read_cameras()
-            # pixels = self.env.projected_pts
-            pixels = self.locate_centers(imgs, 
-                                            num_centers=1, 
-                                            lower=200,
-                                            upper=256).squeeze()
-            obs_2d[self.n_cams*i:self.n_cams*(i+1)] = pixels
-            obs_3d[i] = self.env.feature_pt
-        gt_3d = utils.project_2d_to_3d(self.n_cams, gt_projections, obs_2d)
-        gt_reproj = utils.project_3d_to_2d(gt_projections, obs_3d)
-        og_pred = utils.project_2d_to_3d(self.n_cams, og_projections, obs_2d)
-        og_reproj = utils.project_3d_to_2d(og_projections, obs_3d)
-        new_pred = utils.project_2d_to_3d(self.n_cams, new_projections, obs_2d)
-        new_reproj = utils.project_3d_to_2d(new_projections, obs_3d)
-        print(f"L2-norm(gt_pred - new_pred): {np.linalg.norm(gt_3d - new_pred, axis=1)}")
-        print(f"L2-norm(gt_pred vs og_pred): {np.linalg.norm(gt_3d - og_pred, axis=1)}")
-        print("------------- PRE CHANGE -------------")
-        print(f'gt_cam_pos: {self.env.gt_cam_pos} | gt_cam_eulers: {self.env.gt_cam_eulers}')
-        print(f'cam_pos: {self.env.cam_pos} | cam_eulers: {self.env.cam_eulers}')
-        print(f"L2-norm(gt_cam_eulers - cam_eulers): {np.degrees(np.linalg.norm(self.env.gt_cam_eulers - self.env.cam_eulers))}")
-        print(f"L2-norm(gt_cam_pos - cam_pos): {np.linalg.norm(self.env.gt_cam_pos - self.env.cam_pos)}")
-        breakpoint()
-        pos = np.empty((self.n_cams, 3))
-        eulers = np.empty((self.n_cams, 3))
-        for i in range(self.n_cams):
-            ext = np.linalg.inv(self.intrinsics[i]) @ new_projections[i]
-            R_wc = ext[:, :3]
-            t_wc = ext[:, 3].reshape(3, 1)
-            R_cw = R_wc.T
-            t_cw = -R_cw @ t_wc
-            pos[i] = t_cw.flatten()
-            eulers[i] = R.from_matrix(R_cw).as_euler('xyz', degrees=False)
-        self.env.cam_pos = pos
-        self.env.cam_eulers = eulers
-        print("------------- POST CHANGE -------------")
-        print(f'gt_cam_pos: {self.env.gt_cam_pos} | gt_cam_eulers: {self.env.gt_cam_eulers}')
-        print(f'cam_pos: {self.env.cam_pos} | cam_eulers: {self.env.cam_eulers}')
-        print(f"L2-norm(gt_cam_eulers - cam_eulers): {np.degrees(np.linalg.norm(self.env.gt_cam_eulers - self.env.cam_eulers))}")
-        print(f"L2-norm(gt_cam_pos - cam_pos): {np.linalg.norm(self.env.gt_cam_pos - self.env.cam_pos)}")
-        self.env.render()
-        breakpoint()
+        # gt_projections = self.env.gt_projections
+        # og_projections = self.env.projections
+        # new_projections = np.empty((self.n_cams, 3, 4))
+        # ext_wc1 = self.env.gt_extrinsics_wc[0]     
+        # for i in range(self.n_cams):
+        #     if i == 0:
+        #         new_projections[0] = self.intrinsics[0] @ ext_wc1
+        #     else:
+        #         params = res.x[6*(i-1):6*i]
+        #         pos = params[:3].reshape((3, 1))
+        #         rot_vec = params[3:6].reshape((3,))
+        #         rot_mtrx = R.from_rotvec(rot_vec).as_matrix()
+        #         ext_c1c = np.hstack((rot_mtrx, pos))
+        #         intrinsic = self.intrinsics[i, :, :]
+        #         new_projections[i, :, :] = intrinsic @ utils.compose_Ps(ext_c1c, ext_wc1) 
+        # n_eval = 10
+        # obs_2d = np.empty((self.n_cams * n_eval, 2), dtype=int)
+        # obs_3d = np.empty((n_eval, 3), dtype=np.float32)
+        # for i in range(n_eval):
+        #     imgs = self.read_cameras()
+        #     # pixels = self.env.projected_pts
+        #     pixels = self.locate_centers(imgs, 
+        #                                     num_centers=1, 
+        #                                     lower=200,
+        #                                     upper=256).squeeze()
+        #     obs_2d[self.n_cams*i:self.n_cams*(i+1)] = pixels
+        #     obs_3d[i] = self.env.feature_pt
+        # gt_3d = utils.project_2d_to_3d(self.n_cams, gt_projections, obs_2d)
+        # gt_reproj = utils.project_3d_to_2d(gt_projections, obs_3d)
+        # og_pred = utils.project_2d_to_3d(self.n_cams, og_projections, obs_2d)
+        # og_reproj = utils.project_3d_to_2d(og_projections, obs_3d)
+        # new_pred = utils.project_2d_to_3d(self.n_cams, new_projections, obs_2d)
+        # new_reproj = utils.project_3d_to_2d(new_projections, obs_3d)
+        # print(f"L2-norm(gt_pred - new_pred): {np.linalg.norm(gt_3d - new_pred, axis=1)}")
+        # print(f"L2-norm(gt_pred vs og_pred): {np.linalg.norm(gt_3d - og_pred, axis=1)}")
+        # print("------------- PRE CHANGE -------------")
+        # print(f'gt_cam_pos: {self.env.gt_cam_pos} | gt_cam_eulers: {self.env.gt_cam_eulers}')
+        # print(f'cam_pos: {self.env.cam_pos} | cam_eulers: {self.env.cam_eulers}')
+        # print(f"L2-norm(gt_cam_eulers - cam_eulers): {np.degrees(np.linalg.norm(self.env.gt_cam_eulers - self.env.cam_eulers))}")
+        # print(f"L2-norm(gt_cam_pos - cam_pos): {np.linalg.norm(self.env.gt_cam_pos - self.env.cam_pos)}")
+        # breakpoint()
+        # pos = np.empty((self.n_cams, 3))
+        # eulers = np.empty((self.n_cams, 3))
+        # for i in range(self.n_cams):
+        #     ext = np.linalg.inv(self.intrinsics[i]) @ new_projections[i]
+        #     R_wc = ext[:, :3]
+        #     t_wc = ext[:, 3].reshape(3, 1)
+        #     R_cw = R_wc.T
+        #     t_cw = -R_cw @ t_wc
+        #     pos[i] = t_cw.flatten()
+        #     eulers[i] = R.from_matrix(R_cw).as_euler('xyz', degrees=False)
+        # self.env.cam_pos = pos
+        # self.env.cam_eulers = eulers
+        # print("------------- POST CHANGE -------------")
+        # print(f'gt_cam_pos: {self.env.gt_cam_pos} | gt_cam_eulers: {self.env.gt_cam_eulers}')
+        # print(f'cam_pos: {self.env.cam_pos} | cam_eulers: {self.env.cam_eulers}')
+        # print(f"L2-norm(gt_cam_eulers - cam_eulers): {np.degrees(np.linalg.norm(self.env.gt_cam_eulers - self.env.cam_eulers))}")
+        # print(f"L2-norm(gt_cam_pos - cam_pos): {np.linalg.norm(self.env.gt_cam_pos - self.env.cam_pos)}")
+        # self.env.render()
+        # breakpoint()
         # self.env.cam_pos = new_projections[:, :3, 3].reshape((self.n_cams, 3))
         # self.env.cam_eulers = R.from_matrix(new_projections[:, :3, :3].reshape((self.n_cams, 3, 3))).as_euler('xyz', degrees=False)
         # self.env.render()
@@ -274,7 +275,6 @@ class PsEyeMocap(BaseMocap):
                                     mocap_cfg['eulers']['cam4']], axis=0)
         self.cam_eulers = np.radians(self.cam_eulers)
         super().__init__(mocap_cfg)
-        breakpoint()
 
     def construct_intrinsics(self):
         self.intrinsics = np.empty((4, 3, 3))
