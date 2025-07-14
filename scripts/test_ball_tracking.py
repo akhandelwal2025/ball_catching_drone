@@ -15,28 +15,13 @@ def main(args):
     with open(args.mocap_cfg, "r") as file:
         cfg = yaml.safe_load(file)
     mocap = PsEyeMocap(cfg)
+    ext_c1w = mocap.extrinsics_cw[0]
     breakpoint()
     start = time.time()
     frames = 0
-    track_ball_time = 0
-    calibration = np.zeros((1000, 3))
     try:
-        # calibration routine
-        for i in range(1000):
-            imgs = mocap.read_cameras()
-            imgs = imgs.copy()
-            centers = mocap.locate_centers(imgs=imgs,
-                                           num_centers=1,
-                                           lower=LOWER,
-                                           upper=UPPER)
-            centers = centers.reshape((centers.shape[0] * centers.shape[1], centers.shape[2]))
-            pt_3d = utils.DLT(centers, mocap.projections_wf)
-            calibration[i] = pt_3d
-        calibration = calibration.mean(axis=0)
-        print(f"finished calibration. offset = {calibration} ")
         while True:
             iter_start = time.time()
-            # img = mocap.read_cameras()[np.newaxis, :, :]
             imgs = mocap.read_cameras()
             imgs = imgs.copy()
             centers = mocap.locate_centers(imgs=imgs,
@@ -44,13 +29,10 @@ def main(args):
                                           lower=LOWER,
                                           upper=UPPER)
             centers = centers.reshape((centers.shape[0] * centers.shape[1], centers.shape[2]))
-            print(centers, centers.shape)
-            iter_end = time.time()
-            track_ball_time += iter_end - iter_start
-            pt_3d = utils.DLT(centers, mocap.projections_wf) - calibration
+            # pt_3d = utils.DLT(centers, mocap.projections_wf)
+            pt_3d = utils.DLT(centers, mocap.projections_c1f)[np.newaxis, :]
+            pt_3d = utils.transform(ext_c1w, pt_3d)
             print(pt_3d)
-            mocap.render()
-            # frames += 1
             for i in range(len(imgs)):
                 img = imgs[i]
                 img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
@@ -64,7 +46,7 @@ def main(args):
         seconds_elapsed = time.time() - start
         fps = frames/seconds_elapsed
         print(f"{frames} recorded in {seconds_elapsed} sec -> fps: {fps}")
-        print(f"avg time for mocap.track_ball -> {track_ball_time/frames}")
+        # print(f"avg time for mocap.track_ball -> {track_ball_time/frames}")
 
 
 if __name__ == "__main__":

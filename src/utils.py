@@ -202,6 +202,20 @@ def compose_Ps(A, B):
     else:
         return (A_homo @ B_homo)[:, :3, :]
 
+def transform(P, pt):
+    """
+    Given projection matrix and point to transform, apply the transformation through homogenous coordinates
+    Inputs:
+        P: np.ndarray - projection matrix. shape = (3, 4)
+        pt: np.ndarray - pt. shape = N, 3
+    Outputs:
+        P @ pt with homogeneous coordinates applied. shape = (N, 3)
+    """
+    pt = pt.T
+    pt_homo = np.vstack((pt, np.ones((1, pt.shape[1]))))
+    pt_transformed = P @ pt_homo
+    return pt_transformed.T
+ 
 def construct_extrinsics(pos,
                          eulers):
     """
@@ -257,18 +271,19 @@ def ba_calc_residuals(x: np.ndarray,
 
     # construct projection matrices
     Ps = np.empty((n_cams, 3, 4))
-    # Ps[0] = intrinsics[0] @ np.hstack((np.eye(3), np.zeros((3, 1))))
-    for i in range(n_cams):
+    Ps[0] = intrinsics[0] @ np.hstack((np.eye(3), np.zeros((3, 1))))
+    for i in range(n_cams-1):
         params = x[6*i:6*(i+1)]
         pos = params[:3].reshape((3, 1))
         rot_vec = params[3:6].reshape((3,))
         rot_mtrx = R.from_rotvec(rot_vec).as_matrix()
         ext_wc = np.hstack((rot_mtrx, pos))
         # ext_wc, _ = construct_extrinsics(pos, eulers)
-        intrinsic = intrinsics[i, :, :] 
-        Ps[i, :, :] = intrinsic @ ext_wc
+        intrinsic = intrinsics[i+1, :, :] 
+        Ps[i+1, :, :] = intrinsic @ ext_wc
     # print("in residuals:")
     # print(Ps)
+
     # # estimate 3d points given current estimate of projection matrices 
     # obs_3d = x[n_cams*6:].reshape((n_obs, 3))
 

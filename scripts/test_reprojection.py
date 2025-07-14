@@ -13,43 +13,49 @@ from scipy.optimize import least_squares
 LOWER = np.array([50, 50, 50], dtype=np.uint8)
 UPPER = np.array([255, 255, 255], dtype=np.uint8)
 N_FRAMES = 20
+
+def collect_imgs(mocap, n_frames):
+    i = 0
+    pts_2d = np.empty((n_frames, 4, 2))
+    while i < n_frames:
+        imgs = mocap.read_cameras()
+        imgs = imgs.copy()
+        centers = mocap.locate_centers(imgs=imgs,
+                                        num_centers=1,
+                                        lower=LOWER,
+                                        upper=UPPER)
+        centers = centers.reshape((centers.shape[0] * centers.shape[1], centers.shape[2]))
+        print(centers)
+        print(f"saved {i} of {n_frames}")
+        print("-----------------")
+        for j in range(len(imgs)):
+            img = imgs[j]
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            center = centers[j]
+            dot = cv2.circle(img, (int(center[0]), int(center[1])), radius=3, color=[0, 0, 255])
+            cv2.imshow(f"Cam {j+1}", dot)
+        key = cv2.waitKey(1) & 0xFF
+        if not np.any(centers == 0.) and key != 255:
+            pts_2d[i] = centers
+            i += 1
+    pts_2d = pts_2d.reshape(n_frames * 4, 2)
+    np.savez("data/pts_2d.npz", pts_2d = pts_2d)
+    return pts_2d
+
 def main(args):
     with open(args.mocap_cfg, "r") as file:
         cfg = yaml.safe_load(file)
     mocap = PsEyeMocap(cfg)
-    # i = 0
-    # pts_2d = np.empty((N_FRAMES, 4, 2))
-    # while i < N_FRAMES:
-    #     imgs = mocap.read_cameras()
-    #     imgs = imgs.copy()
-    #     centers = mocap.locate_centers(imgs=imgs,
-    #                                     num_centers=1,
-    #                                     lower=LOWER,
-    #                                     upper=UPPER)
-    #     centers = centers.reshape((centers.shape[0] * centers.shape[1], centers.shape[2]))
-    #     print(centers)
-    #     print(f"saved {i} of {N_FRAMES}")
-    #     print("-----------------")
-    #     for j in range(len(imgs)):
-    #         img = imgs[j]
-    #         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    #         center = centers[j]
-    #         dot = cv2.circle(img, (int(center[0]), int(center[1])), radius=3, color=[0, 0, 255])
-    #         cv2.imshow(f"Cam {j+1}", dot)
-    #     key = cv2.waitKey(1) & 0xFF
-    #     if not np.any(centers == 0.) and key != 255:
-    #         pts_2d[i] = centers
-    #         i += 1
-    # pts_2d = pts_2d.reshape(N_FRAMES * 4, 2)
-    # np.savez("data/pts_2d.npz", pts_2d = pts_2d)
-    # breakpoint()
-    pts_2d = np.load("data/pts_2d.npz")['pts_2d']
-    # print("in main loop:")
-    # print(mocap.projections_wf)
+    if args.imgs == None:
+        pts_2d = collect_imgs(mocap, args.n_frames)
+    else:
+        pts_2d = np.load("data/pts_2d.npz")['pts_2d']
+    breakpoint()
     x0 = np.empty((4*2, 3), dtype=np.float32)
-    x0[0::2] = mocap.extrinsics_wc[:, :3, 3].reshape((4, 3))
-    x0[1::2] = R.from_matrix(mocap.extrinsics_wc[:, :3, :3]).as_rotvec()
-    # residuals = utils.ba_calc_residuals(x0.flatten(), 4, mocap.intrinsics, centers)
+    x0[0::2] = mocap.extrinsics_c1c[:, :3, 3].reshape((4, 3))
+    x0[1::2] = R.from_matrix(mocap.extrinsics_c1c[:, :3, :3]).as_rotvec()
+    x0 = x0[2:] # get rid of first cam
+    og_residuals = utils.ba_calc_residuals(x0.flatten(), 4, mocap.intrinsics, pts_2d)
     res = least_squares(fun=utils.ba_calc_residuals,
                         x0=x0.flatten(),
                         loss='huber',
@@ -62,21 +68,58 @@ def main(args):
                         args=(4, mocap.intrinsics, pts_2d))
     print(res.x)
     print(res.fun)
-    breakpoint()
+    output = res.x
+    ext_c1c = np.empty((4, 3, 4))
+    ext_c1c[0] = np.hstack((np.eye(3), np.zeros((3, 1))))
+    for i in range(3):
+        params = output[6*i:6*(i+1)]
+        pos = params[:3].reshape((3, 1))
+        rot_vec = params[3:6].reshape((3,))
+        rot_mtrx = R.from_rotvec(rot_vec).as_matrix()
+        ext_c1c[i+1] = np.hstack((rot_mtrx, pos))
+    
+    ext_wc1 = mocap.extrinsics_wc[0]
+    ext_wcs = np.empty((4, 3, 4))
+    Ps = np.empty((4, 3, 4))
     cam_pos = np.zeros((4, 3))
     cam_eulers = np.zeros((4, 3))
-    output = res.x.reshape((8, 3))
     for i in range(4):
-        pos = output[2*i, :]
-        rot_vec = output[2*i + 1, :]
-        rot_mtrx = R.from_rotvec(rot_vec).as_matrix()
-        eulers = R.from_rotvec(rot_vec).as_euler("ZYX", degrees=True)
-        assert np.allclose(R.from_euler('ZYX', np.radians(eulers)).as_matrix(), rot_mtrx) 
-        pos = -rot_mtrx.T @ pos
+        ext_wc = utils.compose_Ps(ext_c1c[i], ext_wc1)
+        ext_wcs[i] = ext_wc
+        Ps[i] = mocap.intrinsics[i] @ ext_wc
+        rot_mtrx = ext_wc[:3, :3]
+        eulers = R.from_matrix(rot_mtrx).as_euler("ZYX", degrees=True)
+        pos = -rot_mtrx.T @ ext_wc[:3, 3]
         cam_pos[i] = pos
-        cam_eulers[i] = eulers
+        cam_eulers[i] = [eulers[2], eulers[1], eulers[0]]
+
+        z, y, x = eulers[0], eulers[1], eulers[2]
+        assert np.allclose(R.from_euler("ZYX", [z, y, x], degrees=True).as_matrix(), rot_mtrx)
+        print("verified rot mtrx")
+    print(ext_wcs)
     print(cam_pos)
     print(cam_eulers)
+
+    # evalute reprojection error
+    n_cams = 4
+    n_obs = pts_2d.shape[0] // n_cams
+    obs_3d = np.empty((n_obs, 3), dtype=np.float32)
+    for i in range(n_obs):
+        obs_3d[i] = utils.DLT(pixels=pts_2d[n_cams*i:n_cams*(i+1)],
+                        projections=Ps)
+    # calculate residuals
+    obs_3d = obs_3d.T                                                       # (3, n_obs)
+    obs_3d = np.vstack((obs_3d, np.ones((1, obs_3d.shape[1]))))             # add homo coords, (4, n_obs)
+    projected_2d = Ps @ obs_3d                                              # (n_cams, 3, 4) @ (4, n_obs) = (n_cams, 3, n_obs)
+    # breakpoint()
+    projected_2d = np.transpose(projected_2d, (2, 0, 1)).reshape(-1, 3)     # (n_obs * n_cams, 3). ordering of (2, 0, 1) is important to preserve proper interleaving
+    projected_2d = projected_2d / projected_2d[:, -1][:, np.newaxis]
+    projected_2d = projected_2d[:, :2]                                      # get rid of homo coords, (n_obs * n_cams, 2)
+    residuals = (projected_2d-pts_2d).flatten()
+    print(residuals)
+    print(Ps)
+
+    breakpoint()
     # print(residuals)
     # print(f'mean: {residuals.mean()}')
     # print(f'norm: {np.linalg.norm(residuals) ** 2}')
@@ -87,5 +130,7 @@ if __name__ == "__main__":
     np.set_printoptions(precision=3, suppress=True)
     parser = argparse.ArgumentParser(description='Description of your program')
     parser.add_argument('--mocap_cfg', type=str, default='cfgs/PSEyeMocap.yaml')
+    parser.add_argument('--n_frames', type=int, default=20)
+    parser.add_argument('--imgs', type=str, default='data/pts_2d.npz')
     args = parser.parse_args()  
     main(args)
