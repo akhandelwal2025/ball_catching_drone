@@ -12,7 +12,7 @@ from scipy.optimize import least_squares
 # BLACK HSV BOUNDS
 LOWER = np.array([50, 50, 50], dtype=np.uint8)
 UPPER = np.array([255, 255, 255], dtype=np.uint8)
-N_FRAMES = 20
+N_FRAMES = 30
 
 def collect_imgs(mocap, n_frames):
     i = 0
@@ -46,18 +46,37 @@ def main(args):
     with open(args.mocap_cfg, "r") as file:
         cfg = yaml.safe_load(file)
     mocap = PsEyeMocap(cfg)
-    if args.imgs == None:
+    if args.imgs == '':
         pts_2d = collect_imgs(mocap, args.n_frames)
     else:
         pts_2d = np.load("data/pts_2d.npz")['pts_2d']
+    x0 = np.empty((34), dtype=np.float32)
+    for i in range(4):
+        for i, cam in enumerate(['cam1', 'cam2', 'cam3', 'cam4']):
+            fx = cfg['intrinsics'][cam]['fx'] 
+            fy = cfg['intrinsics'][cam]['fy']
+            ox = cfg['intrinsics'][cam]['ox'] 
+            oy = cfg['intrinsics'][cam]['oy']
+            pos = mocap.extrinsics_c1c[i, :3, 3].reshape(1, 3)
+            rotvec = R.from_matrix(mocap.extrinsics_c1c[i, :3, :3]).as_rotvec()
+            if i == 0:
+                x0[0] = fx
+                x0[1] = fy
+                x0[2] = ox
+                x0[3] = oy
+            else:
+                x0[4+10*(i-1):4+10*(i-1)+3] = pos
+                x0[4+10*(i-1)+3:4+10*(i-1)+6] = rotvec
+                x0[4+10*(i-1)+6] = fx
+                x0[4+10*(i-1)+7] = fy
+                x0[4+10*(i-1)+8] = ox
+                x0[4+10*(i-1)+9] = oy
+    print("in main")
+    print(mocap.projections_c1f)
+    og_residuals = utils.ba_calc_residuals(x0, 4, pts_2d)
     breakpoint()
-    x0 = np.empty((4*2, 3), dtype=np.float32)
-    x0[0::2] = mocap.extrinsics_c1c[:, :3, 3].reshape((4, 3))
-    x0[1::2] = R.from_matrix(mocap.extrinsics_c1c[:, :3, :3]).as_rotvec()
-    x0 = x0[2:] # get rid of first cam
-    og_residuals = utils.ba_calc_residuals(x0.flatten(), 4, mocap.intrinsics, pts_2d)
     res = least_squares(fun=utils.ba_calc_residuals,
-                        x0=x0.flatten(),
+                        x0=x0,
                         loss='huber',
                         # f_scale=4.0,
                         # jac='3-point',
@@ -65,40 +84,64 @@ def main(args):
                         ftol=2.2e-16,
                         xtol=2.2e-16,
                         verbose=2,
-                        args=(4, mocap.intrinsics, pts_2d))
+                        args=(4, pts_2d))
     print(res.x)
     print(res.fun)
+    breakpoint()
     output = res.x
-    ext_c1c = np.empty((4, 3, 4))
-    ext_c1c[0] = np.hstack((np.eye(3), np.zeros((3, 1))))
-    for i in range(3):
-        params = output[6*i:6*(i+1)]
-        pos = params[:3].reshape((3, 1))
-        rot_vec = params[3:6].reshape((3,))
-        rot_mtrx = R.from_rotvec(rot_vec).as_matrix()
-        ext_c1c[i+1] = np.hstack((rot_mtrx, pos))
-    
-    ext_wc1 = mocap.extrinsics_wc[0]
-    ext_wcs = np.empty((4, 3, 4))
-    Ps = np.empty((4, 3, 4))
-    cam_pos = np.zeros((4, 3))
-    cam_eulers = np.zeros((4, 3))
     for i in range(4):
-        ext_wc = utils.compose_Ps(ext_c1c[i], ext_wc1)
-        ext_wcs[i] = ext_wc
-        Ps[i] = mocap.intrinsics[i] @ ext_wc
-        rot_mtrx = ext_wc[:3, :3]
-        eulers = R.from_matrix(rot_mtrx).as_euler("ZYX", degrees=True)
-        pos = -rot_mtrx.T @ ext_wc[:3, 3]
-        cam_pos[i] = pos
-        cam_eulers[i] = [eulers[2], eulers[1], eulers[0]]
+        if i == 0:
+            fx = output[0]
+            fy = output[1]
+            ox = output[2]
+            oy = output[3]
+            print("cam1:")
+            print(f"    fx: {fx}")
+            print(f"    fy: {fy}")
+            print(f"    ox: {ox}")
+            print(f"    oy: {oy}")
+        else:
+            params = res.x[4 + 10*(i-1):4 + 10*i]
+            pos = params[:3].reshape((3, 1))
+            rot_vec = params[3:6].reshape((3,))
+            fx, fy, ox, oy = params[6], params[7], params[8], params[9]
+            intrinsics = construct_intrinsics(fx, fy, ox, oy)
+            rot_mtrx = R.from_rotvec(rot_vec).as_matrix()
+            ext_c1c = np.hstack((rot_mtrx, pos))
+            Ps[i, :, :] = intrinsics @ ext_c1c
 
-        z, y, x = eulers[0], eulers[1], eulers[2]
-        assert np.allclose(R.from_euler("ZYX", [z, y, x], degrees=True).as_matrix(), rot_mtrx)
-        print("verified rot mtrx")
-    print(ext_wcs)
-    print(cam_pos)
-    print(cam_eulers)
+
+
+    # ext_c1c = np.empty((4, 3, 4))
+    # ext_c1c[0] = np.hstack((np.eye(3), np.zeros((3, 1))))
+    # for i in range(3):
+    #     params = output[6*i:6*(i+1)]
+    #     pos = params[:3].reshape((3, 1))
+    #     rot_vec = params[3:6].reshape((3,))
+    #     rot_mtrx = R.from_rotvec(rot_vec).as_matrix()
+    #     ext_c1c[i+1] = np.hstack((rot_mtrx, pos))
+    
+    # ext_wc1 = mocap.extrinsics_wc[0]
+    # ext_wcs = np.empty((4, 3, 4))
+    # Ps = np.empty((4, 3, 4))
+    # cam_pos = np.zeros((4, 3))
+    # cam_eulers = np.zeros((4, 3))
+    # for i in range(4):
+    #     ext_wc = utils.compose_Ps(ext_c1c[i], ext_wc1)
+    #     ext_wcs[i] = ext_wc
+    #     Ps[i] = mocap.intrinsics[i] @ ext_wc
+    #     rot_mtrx = ext_wc[:3, :3]
+    #     eulers = R.from_matrix(rot_mtrx).as_euler("ZYX", degrees=True)
+    #     pos = -rot_mtrx.T @ ext_wc[:3, 3]
+    #     cam_pos[i] = pos
+    #     cam_eulers[i] = [eulers[2], eulers[1], eulers[0]]
+
+    #     z, y, x = eulers[0], eulers[1], eulers[2]
+    #     assert np.allclose(R.from_euler("ZYX", [z, y, x], degrees=True).as_matrix(), rot_mtrx)
+    #     print("verified rot mtrx")
+    # print(ext_wcs)
+    # print(cam_pos)
+    # print(cam_eulers)
 
     # evalute reprojection error
     n_cams = 4
@@ -130,7 +173,7 @@ if __name__ == "__main__":
     np.set_printoptions(precision=3, suppress=True)
     parser = argparse.ArgumentParser(description='Description of your program')
     parser.add_argument('--mocap_cfg', type=str, default='cfgs/PSEyeMocap.yaml')
-    parser.add_argument('--n_frames', type=int, default=20)
+    parser.add_argument('--n_frames', type=int, default=30)
     parser.add_argument('--imgs', type=str, default='data/pts_2d.npz')
     args = parser.parse_args()  
     main(args)

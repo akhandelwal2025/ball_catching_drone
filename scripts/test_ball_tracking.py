@@ -29,6 +29,7 @@ def main(args):
                                           lower=LOWER,
                                           upper=UPPER)
             centers = centers.reshape((centers.shape[0] * centers.shape[1], centers.shape[2]))
+            print(centers)
             # pt_3d = utils.DLT(centers, mocap.projections_wf)
             pt_3d = utils.DLT(centers, mocap.projections_c1f)[np.newaxis, :]
             pt_3d = utils.transform(ext_c1w, pt_3d)

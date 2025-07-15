@@ -14,13 +14,13 @@ class Vis():
         self.vis = o3d.visualization.Visualizer()
         self.vis.create_window()
 
-        self.draw_axes(origin=np.array([[0., 0., 0.,]]),
+        self.draw_axes(origins=np.array([[0., 0., 0.,]]),
                        eulers=np.array([[0., 0., 0.,]]))
         self.draw_axes(cam_pos, cam_eulers)
         # self.draw_axes(cam_pos[0, :][np.newaxis, :], cam_eulers[0, :][np.newaxis, :])
 
     def draw_axes(self,
-                  origin: np.ndarray,
+                  origins: np.ndarray,
                   eulers: np.ndarray):
         """
         draw a coordinate axis given an origin point and eulers defining the rotation
@@ -28,23 +28,26 @@ class Vis():
             origin: np.ndarray - position of the coordinate frames origin. shape = (N, 3), where N = num frames
             eulers: np.ndarray - rotation of the coordinate frame. shape = (N, 3), where N = num frames
         """
-        origin = origin / 2.0
-        N = origin.shape[0]
-        rotation = np.empty((N, 3, 3))
-        rotation = np.apply_along_axis(func1d=utils.generate_rotation_matrix_from_eulers, 
-                                       axis=1,
-                                       arr=eulers)
+        origins = origins / 2.0
+        N = origins.shape[0]
         # needed to rotate the frame 90 deg about x-axis to get expected standard coordinate frame
-        R_x = R_x = np.array([
+        R_x = np.array([
             [1., 0., 0.,],
             [0., np.cos(-np.pi/2), -np.sin(-np.pi/2)],
             [0., np.sin(-np.pi/2), np.cos(-np.pi/2)]
         ])
         for i in range(N):
+            origin = origins[i]
+            euler = eulers[i]
             frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1, origin=[0, 0, 0])
-            frame.rotate(R_x, center=[0., 0., 0.,])
-            frame.rotate(rotation[i], center=[0., 0., 0.,])
-            frame.translate(R_x @ origin[i].T)
+            R = frame.get_rotation_matrix_from_xzy([np.radians(-90), euler[2], euler[1]])
+            frame.rotate(R, center=[0., 0., 0.,])
+
+            new_x = R_x @ np.array([1, 0, 0])
+            new_y = R_x @ np.array([0, 1, 0])
+            new_z = R_x @ np.array([0, 0, 1])
+            translation = origin[0] * new_x + origin[1] * new_y + origin[2] * new_z
+            frame.translate(translation)
             self.vis.add_geometry(frame)
             self.vis.poll_events()
             self.vis.update_renderer()
