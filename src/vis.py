@@ -66,11 +66,18 @@ class Vis():
         new_x = R_x @ np.array([1, 0, 0])
         new_y = R_x @ np.array([0, 1, 0])
         new_z = R_x @ np.array([0, 0, 1])
-        pt_3d = pt_3d / 2
-        translation = (pt_3d[0, 0] * new_x + pt_3d[0, 1] * new_y + pt_3d[0, 2] * new_z)[np.newaxis, :]
+        pt_3d = pt_3d / 2    
+        # translation = (pt_3d[:, 0][np.newaxis, :] * new_x[np.newaxis, :] + pt_3d[:, 1][np.newaxis] * new_y[np.newaxis, :] + pt_3d[:, 2][np.newaxis] * new_z[np.newaxis, :])
+        translation = (
+            pt_3d[:, 0:1] * new_x[np.newaxis, :] +
+            pt_3d[:, 1:2] * new_y[np.newaxis, :] +
+            pt_3d[:, 2:3] * new_z[np.newaxis, :]
+        )
+        if len(translation.shape) == 1:
+            translation = translation[np.newaxis, :]
         print(f"translations: {translation.shape}")
         self.pcd.points = o3d.utility.Vector3dVector(translation)
-        self.pcd.colors = o3d.utility.Vector3dVector([[1.0, 0.0, 0.0]])
+        self.pcd.colors = o3d.utility.Vector3dVector([[1.0, 0.0, 0.0] for _ in range(len(translation))])
         self.vis.update_geometry(self.pcd)
 
         self.vis.poll_events()
