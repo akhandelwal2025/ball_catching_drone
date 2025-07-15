@@ -90,7 +90,33 @@ class BaseMocap(ABC):
             filename = f'mocap_{num_timesteps}_frames'
             np.save(filename, mocap_imgs=mocap_imgs)
         return mocap_imgs
+    
+    def undistort_points(self, pts_2d):
+        cam1_K = self.cam1_arrs['intrinsics']
+        cam1_dist = self.cam1_arrs['distortion_coeffs']
 
+        cam2_K = self.cam2_arrs['intrinsics']
+        cam2_dist = self.cam2_arrs['distortion_coeffs']
+
+        cam3_K = self.cam3_arrs['intrinsics']
+        cam3_dist = self.cam3_arrs['distortion_coeffs']
+
+        cam4_K = self.cam4_arrs['intrinsics']
+        cam4_dist = self.cam4_arrs['distortion_coeffs']
+
+        n_obs = pts_2d.shape[0] // 4
+        pts_2d_undistorted = np.empty(pts_2d.shape, dtype=np.float32)
+        for i in range(n_obs):
+            pt1 = pts_2d[4*i]
+            pt2 = pts_2d[4*i+1]
+            pt3 = pts_2d[4*i+2]
+            pt4 = pts_2d[4*i+3]
+            pts_2d_undistorted[4*i] = cv2.undistortPoints(pt1, cam1_K, cam1_dist, P=cam1_K) if not np.any(pt1 == -1) else pt1
+            pts_2d_undistorted[4*i+1] = cv2.undistortPoints(pt2, cam2_K, cam2_dist, P=cam2_K) if not np.any(pt2 == -1) else pt2
+            pts_2d_undistorted[4*i+2] = cv2.undistortPoints(pt3, cam3_K, cam3_dist, P=cam3_K) if not np.any(pt3 == -1) else pt3
+            pts_2d_undistorted[4*i+3] = cv2.undistortPoints(pt4, cam4_K, cam4_dist, P=cam4_K) if not np.any(pt4 == -1) else pt4
+        return pts_2d_undistorted
+    
     def locate_centers(self, imgs, num_centers, lower, upper):
         """
         Locate IR dots in set of images
@@ -274,6 +300,12 @@ class PsEyeMocap(BaseMocap):
                                     mocap_cfg['eulers']['cam3'],
                                     mocap_cfg['eulers']['cam4']], axis=0)
         self.cam_eulers = np.radians(self.cam_eulers)
+
+        self.cam1_arrs = np.load("data/zoomed_intrinsics/cam1.npz")
+        self.cam2_arrs = np.load("data/zoomed_intrinsics/cam2.npz")
+        self.cam3_arrs = np.load("data/zoomed_intrinsics/cam3.npz")
+        self.cam4_arrs = np.load("data/zoomed_intrinsics/cam4.npz")
+
         super().__init__(mocap_cfg)
 
     def construct_intrinsics(self):

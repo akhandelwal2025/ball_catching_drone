@@ -42,6 +42,37 @@ def collect_imgs(mocap, n_frames):
     np.savez("data/pts_2d.npz", pts_2d = pts_2d)
     return pts_2d
 
+def undistort_points(pts_2d):
+    cam1_arrs = np.load("data/zoomed_intrinsics/cam1.npz")
+    cam2_arrs = np.load("data/zoomed_intrinsics/cam2.npz")
+    cam3_arrs = np.load("data/zoomed_intrinsics/cam3.npz")
+    cam4_arrs = np.load("data/zoomed_intrinsics/cam4.npz")
+
+    cam1_K = cam1_arrs['intrinsics']
+    cam1_dist = cam1_arrs['distortion_coeffs']
+
+    cam2_K = cam2_arrs['intrinsics']
+    cam2_dist = cam2_arrs['distortion_coeffs']
+
+    cam3_K = cam3_arrs['intrinsics']
+    cam3_dist = cam3_arrs['distortion_coeffs']
+
+    cam4_K = cam4_arrs['intrinsics']
+    cam4_dist = cam4_arrs['distortion_coeffs']
+
+    n_obs = pts_2d.shape[0] // 4
+    pts_2d_undistorted = np.empty(pts_2d.shape, dtype=np.float32)
+    for i in range(n_obs):
+        pt1 = pts_2d[4*i]
+        pt2 = pts_2d[4*i+1]
+        pt3 = pts_2d[4*i+2]
+        pt4 = pts_2d[4*i+3]
+        pts_2d_undistorted[4*i] = cv2.undistortPoints(pt1, cam1_K, cam1_dist, P=cam1_K)
+        pts_2d_undistorted[4*i+1] = cv2.undistortPoints(pt2, cam2_K, cam2_dist, P=cam2_K)
+        pts_2d_undistorted[4*i+2] = cv2.undistortPoints(pt3, cam3_K, cam3_dist, P=cam3_K)
+        pts_2d_undistorted[4*i+3] = cv2.undistortPoints(pt4, cam4_K, cam4_dist, P=cam4_K)
+    return pts_2d_undistorted
+
 def main(args):
     with open(args.mocap_cfg, "r") as file:
         cfg = yaml.safe_load(file)
@@ -50,6 +81,8 @@ def main(args):
         pts_2d = collect_imgs(mocap, args.n_frames)
     else:
         pts_2d = np.load("data/pts_2d.npz")['pts_2d']
+    
+    pts_2d = undistort_points(pts_2d)
     x0 = np.empty((34), dtype=np.float32)
     for i in range(4):
         for i, cam in enumerate(['cam1', 'cam2', 'cam3', 'cam4']):
@@ -87,14 +120,22 @@ def main(args):
                         args=(4, pts_2d))
     print(res.x)
     print(res.fun)
-    breakpoint()
     output = res.x
+    intrinsics =  np.empty((4, 3, 3), dtype=np.float32)
+    ext_c1cs = np.empty((4, 3, 4), dtype=np.float32)
+    ext_wcs = np.empty((4, 3, 4), dtype=np.float32)
+    Ps = np.empty((4, 3, 4), dtype=np.float32)
+    ext_wc1 = mocap.extrinsics_wc[0]
     for i in range(4):
         if i == 0:
             fx = output[0]
             fy = output[1]
             ox = output[2]
             oy = output[3]
+            intrinsics[i] = utils.construct_intrinsics(fx, fy, ox, oy)
+            ext_c1cs[i] = np.hstack((np.eye(3), np.zeros((3, 1))))
+            ext_wcs[i] = utils.compose_Ps(ext_c1cs[i], ext_wc1)
+            Ps[i] = intrinsics[i] @ ext_wcs[i]
             print("cam1:")
             print(f"    fx: {fx}")
             print(f"    fy: {fy}")
@@ -105,10 +146,48 @@ def main(args):
             pos = params[:3].reshape((3, 1))
             rot_vec = params[3:6].reshape((3,))
             fx, fy, ox, oy = params[6], params[7], params[8], params[9]
-            intrinsics = construct_intrinsics(fx, fy, ox, oy)
+            intrinsics[i] = utils.construct_intrinsics(fx, fy, ox, oy)
+
             rot_mtrx = R.from_rotvec(rot_vec).as_matrix()
-            ext_c1c = np.hstack((rot_mtrx, pos))
-            Ps[i, :, :] = intrinsics @ ext_c1c
+            ext_c1cs[i] = np.hstack((rot_mtrx, pos))
+            ext_wcs[i] = utils.compose_Ps(ext_c1cs[i], ext_wc1)
+            Ps[i] = intrinsics[i] @ ext_wcs[i]
+            R_wf = ext_wcs[i, :3, :3]
+            transform = np.array([
+                [0., 1., 0.,], 
+                [0., 0., 1.], 
+                [1., 0., 0.,]
+            ])
+            eulers = R.from_matrix((transform.T @ R_wf).T).as_euler("ZYX", degrees=True)
+            pos = -R_wf.T @ ext_wcs[i, :3, 3]
+            print(f"cam{i}:")
+            print(f"    fx: {fx}")
+            print(f"    fy: {fy}")
+            print(f"    ox: {ox}")
+            print(f"    oy: {oy}")
+            print(f"    pos: {np.round(pos, 3)}")
+            print(f"    eulers: {np.round(eulers[::-1], 3)}")
+    
+    # evaluate reprojection error
+    n_cams = 4
+    n_obs = pts_2d.shape[0] // n_cams
+    obs_3d = np.empty((n_obs, 3), dtype=np.float32)
+    for i in range(n_obs):
+        obs_3d[i] = utils.DLT(pixels=pts_2d[n_cams*i:n_cams*(i+1)],
+                        projections=Ps)
+
+    # calculate residuals
+    obs_3d = obs_3d.T                                                       # (3, n_obs)
+    obs_3d = np.vstack((obs_3d, np.ones((1, obs_3d.shape[1]))))             # add homo coords, (4, n_obs)
+    projected_2d = Ps @ obs_3d                                              # (n_cams, 3, 4) @ (4, n_obs) = (n_cams, 3, n_obs)
+    projected_2d = np.transpose(projected_2d, (2, 0, 1)).reshape(-1, 3)     # (n_obs * n_cams, 3). ordering of (2, 0, 1) is important to preserve proper interleaving
+    projected_2d = projected_2d / projected_2d[:, -1][:, np.newaxis]
+    projected_2d = projected_2d[:, :2]                                      # get rid of homo coords, (n_obs * n_cams, 2)
+    new_residuals = (projected_2d-pts_2d).flatten()
+    print(f"np.mean(og_residuals -> new_residuals): {np.mean(og_residuals)} -> {np.mean(new_residuals)}")
+    print(f"np.linalg.norm(og_residuals -> new_residuals): {np.linalg.norm(og_residuals)} -> {np.linalg.norm(new_residuals)}")
+    breakpoint()
+
 
 
 
@@ -144,25 +223,25 @@ def main(args):
     # print(cam_eulers)
 
     # evalute reprojection error
-    n_cams = 4
-    n_obs = pts_2d.shape[0] // n_cams
-    obs_3d = np.empty((n_obs, 3), dtype=np.float32)
-    for i in range(n_obs):
-        obs_3d[i] = utils.DLT(pixels=pts_2d[n_cams*i:n_cams*(i+1)],
-                        projections=Ps)
-    # calculate residuals
-    obs_3d = obs_3d.T                                                       # (3, n_obs)
-    obs_3d = np.vstack((obs_3d, np.ones((1, obs_3d.shape[1]))))             # add homo coords, (4, n_obs)
-    projected_2d = Ps @ obs_3d                                              # (n_cams, 3, 4) @ (4, n_obs) = (n_cams, 3, n_obs)
-    # breakpoint()
-    projected_2d = np.transpose(projected_2d, (2, 0, 1)).reshape(-1, 3)     # (n_obs * n_cams, 3). ordering of (2, 0, 1) is important to preserve proper interleaving
-    projected_2d = projected_2d / projected_2d[:, -1][:, np.newaxis]
-    projected_2d = projected_2d[:, :2]                                      # get rid of homo coords, (n_obs * n_cams, 2)
-    residuals = (projected_2d-pts_2d).flatten()
-    print(residuals)
-    print(Ps)
+    # n_cams = 4
+    # n_obs = pts_2d.shape[0] // n_cams
+    # obs_3d = np.empty((n_obs, 3), dtype=np.float32)
+    # for i in range(n_obs):
+    #     obs_3d[i] = utils.DLT(pixels=pts_2d[n_cams*i:n_cams*(i+1)],
+    #                     projections=Ps)
+    # # calculate residuals
+    # obs_3d = obs_3d.T                                                       # (3, n_obs)
+    # obs_3d = np.vstack((obs_3d, np.ones((1, obs_3d.shape[1]))))             # add homo coords, (4, n_obs)
+    # projected_2d = Ps @ obs_3d                                              # (n_cams, 3, 4) @ (4, n_obs) = (n_cams, 3, n_obs)
+    # # breakpoint()
+    # projected_2d = np.transpose(projected_2d, (2, 0, 1)).reshape(-1, 3)     # (n_obs * n_cams, 3). ordering of (2, 0, 1) is important to preserve proper interleaving
+    # projected_2d = projected_2d / projected_2d[:, -1][:, np.newaxis]
+    # projected_2d = projected_2d[:, :2]                                      # get rid of homo coords, (n_obs * n_cams, 2)
+    # residuals = (projected_2d-pts_2d).flatten()
+    # print(residuals)
+    # print(Ps)
 
-    breakpoint()
+    # breakpoint()
     # print(residuals)
     # print(f'mean: {residuals.mean()}')
     # print(f'norm: {np.linalg.norm(residuals) ** 2}')

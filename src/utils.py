@@ -288,8 +288,8 @@ def ba_calc_residuals(x: np.ndarray,
             rot_mtrx = R.from_rotvec(rot_vec).as_matrix()
             ext_c1c = np.hstack((rot_mtrx, pos))
             Ps[i, :, :] = intrinsics @ ext_c1c
-    print("in residuals:")
-    print(Ps)
+    # print("in residuals:")
+    # print(Ps)
 
     # # estimate 3d points given current estimate of projection matrices 
     # obs_3d = x[n_cams*6:].reshape((n_obs, 3))

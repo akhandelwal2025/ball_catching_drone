@@ -15,7 +15,6 @@ def main(args):
     with open(args.mocap_cfg, "r") as file:
         cfg = yaml.safe_load(file)
     mocap = PsEyeMocap(cfg)
-    ext_c1w = mocap.extrinsics_cw[0]
     breakpoint()
     start = time.time()
     frames = 0
@@ -29,11 +28,11 @@ def main(args):
                                           lower=LOWER,
                                           upper=UPPER)
             centers = centers.reshape((centers.shape[0] * centers.shape[1], centers.shape[2]))
+            centers = mocap.undistort_points(centers) # TODO THIS ONLY WORKS WITH NUM_CENTERS=1 IN LOCATE_CENTERS RIGHT NOW!!!!!!!!
+            pt_3d = utils.DLT(centers, mocap.projections_wf)
             print(centers)
-            # pt_3d = utils.DLT(centers, mocap.projections_wf)
-            pt_3d = utils.DLT(centers, mocap.projections_c1f)[np.newaxis, :]
-            pt_3d = utils.transform(ext_c1w, pt_3d)
             print(pt_3d)
+            print("-------------------------")
             for i in range(len(imgs)):
                 img = imgs[i]
                 img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
