@@ -13,11 +13,12 @@ class Vis():
 
         self.vis = o3d.visualization.Visualizer()
         self.vis.create_window()
-
+        self.pcd = o3d.geometry.PointCloud() # used to visualize points
+        
         self.draw_axes(origins=np.array([[0., 0., 0.,]]),
                        eulers=np.array([[0., 0., 0.,]]))
         self.draw_axes(cam_pos, cam_eulers)
-        # self.draw_axes(cam_pos[0, :][np.newaxis, :], cam_eulers[0, :][np.newaxis, :])
+        self.vis.add_geometry(self.pcd)
 
     def draw_axes(self,
                   origins: np.ndarray,
@@ -52,9 +53,53 @@ class Vis():
             self.vis.poll_events()
             self.vis.update_renderer()
 
-    def render(self):
+    def render(self,
+               centers,
+               imgs,
+               pt_3d):
+        
+        R_x = np.array([
+            [1., 0., 0.,],
+            [0., np.cos(-np.pi/2), -np.sin(-np.pi/2)],
+            [0., np.sin(-np.pi/2), np.cos(-np.pi/2)]
+        ])
+        new_x = R_x @ np.array([1, 0, 0])
+        new_y = R_x @ np.array([0, 1, 0])
+        new_z = R_x @ np.array([0, 0, 1])
+        pt_3d = pt_3d / 2
+        translation = (pt_3d[0, 0] * new_x + pt_3d[0, 1] * new_y + pt_3d[0, 2] * new_z)[np.newaxis, :]
+        print(f"translations: {translation.shape}")
+        self.pcd.points = o3d.utility.Vector3dVector(translation)
+        self.pcd.colors = o3d.utility.Vector3dVector([[1.0, 0.0, 0.0]])
+        self.vis.update_geometry(self.pcd)
+
         self.vis.poll_events()
         self.vis.update_renderer()
+
+        # render each of the images
+        cv2.namedWindow("Camera 1")
+        cv2.namedWindow("Camera 2")
+        cv2.namedWindow("Camera 3")
+        cv2.namedWindow("Camera 4")
+
+        # Move the windows to a 2x2 grid layout on screen (optional)
+        cv2.moveWindow("Camera 1", 445, 325)
+        cv2.moveWindow("Camera 2", 0, 325)
+        cv2.moveWindow("Camera 3", 0, 0)
+        cv2.moveWindow("Camera 4", 445, 0)
+
+        if centers is not None:
+            n_centers = centers.shape[0] // 4
+            for c in range(n_centers):
+                for i in range(4):
+                    img = imgs[i]
+                    img = cv2.circle(img, centers[4 * c + i], radius=3, color=[0, 0, 255])
+                    imgs[i] = img
+        cv2.imshow("Camera 1", imgs[0])
+        cv2.imshow("Camera 2", imgs[1])
+        cv2.imshow("Camera 3", imgs[2])
+        cv2.imshow("Camera 4", imgs[3])
+
         cv2.waitKey(1)
 # -------------- ARCHIVE --------------
 # class Vis():

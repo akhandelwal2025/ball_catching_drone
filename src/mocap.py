@@ -339,6 +339,10 @@ class PsEyeMocap(BaseMocap):
         return self.imgs
     
     def render(self,
-               centers = None,
-               feature_pts = None):
-        self.vis.render()
+               centers,
+               imgs,
+               pts_3d):
+        centers = centers.astype(int)
+        self.vis.render(centers,
+                        imgs,
+                        pts_3d)
