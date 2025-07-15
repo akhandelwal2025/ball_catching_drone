@@ -18,6 +18,8 @@ def main(args):
     breakpoint()
     start = time.time()
     frames = 0
+    all_pts = []
+    
     try:
         while True:
             iter_start = time.time()
@@ -30,12 +32,16 @@ def main(args):
             centers = centers.reshape((centers.shape[0] * centers.shape[1], centers.shape[2]))
             centers = mocap.undistort_points(centers) # TODO THIS ONLY WORKS WITH NUM_CENTERS=1 IN LOCATE_CENTERS RIGHT NOW!!!!!!!!
             pt_3d = utils.DLT(centers, mocap.projections_wf)
+            if frames % 2 == 0:
+                all_pts.append(pt_3d)
+                # print(all_pts)
             print(centers)
             print(pt_3d)
             print("-------------------------")
             mocap.render(centers=centers,
                          imgs=imgs,
-                         pts_3d=pt_3d[np.newaxis, :])
+                         pts_3d=np.array(all_pts))
+            
             # for i in range(len(imgs)):
             #     img = imgs[i]
             #     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
