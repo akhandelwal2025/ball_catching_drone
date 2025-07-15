@@ -112,6 +112,9 @@ def DLT(pixels,
         3-element np.ndarray representing best guess for triangulated 3D point  
     """
     # vectorized creation of A - kinda overkill for four cams, but good numpy practice lol
+    mask = np.any(pixels != -1, axis=1)
+    pixels = pixels[mask]
+    projections = projections[mask]
     N = pixels.shape[0]
     row1 = pixels[:, 1][:, np.newaxis] * projections[:, 2, :] - projections[:, 1, :] # vP_2 - P_1
     row2 = projections[:, 0, :] - pixels[:, 0][:, np.newaxis] * projections[:, 2, :] # P_0 - uP_2
@@ -251,7 +254,6 @@ def construct_extrinsics(pos,
 
 def ba_calc_residuals(x: np.ndarray,
                       n_cams: int,
-                      intrinsics: np.ndarray,
                       obs_2d: np.ndarray):
     """
     Calculate residuals between projected 3D points and 2D observations to be optimized using bundle adjustment.
@@ -271,18 +273,23 @@ def ba_calc_residuals(x: np.ndarray,
 
     # construct projection matrices
     Ps = np.empty((n_cams, 3, 4))
-    Ps[0] = intrinsics[0] @ np.hstack((np.eye(3), np.zeros((3, 1))))
-    for i in range(n_cams-1):
-        params = x[6*i:6*(i+1)]
-        pos = params[:3].reshape((3, 1))
-        rot_vec = params[3:6].reshape((3,))
-        rot_mtrx = R.from_rotvec(rot_vec).as_matrix()
-        ext_wc = np.hstack((rot_mtrx, pos))
-        # ext_wc, _ = construct_extrinsics(pos, eulers)
-        intrinsic = intrinsics[i+1, :, :] 
-        Ps[i+1, :, :] = intrinsic @ ext_wc
-    # print("in residuals:")
-    # print(Ps)
+    for i in range(n_cams):
+        if i == 0:
+            params = x[:4]
+            fx, fy, ox, oy = params[0], params[1], params[2], params[3]
+            intrinsics = construct_intrinsics(fx, fy, ox, oy)
+            Ps[0] = intrinsics @ np.hstack((np.eye(3), np.zeros((3, 1))))
+        else:
+            params = x[4 + 10*(i-1):4 + 10*i]
+            pos = params[:3].reshape((3, 1))
+            rot_vec = params[3:6].reshape((3,))
+            fx, fy, ox, oy = params[6], params[7], params[8], params[9]
+            intrinsics = construct_intrinsics(fx, fy, ox, oy)
+            rot_mtrx = R.from_rotvec(rot_vec).as_matrix()
+            ext_c1c = np.hstack((rot_mtrx, pos))
+            Ps[i, :, :] = intrinsics @ ext_c1c
+    print("in residuals:")
+    print(Ps)
 
     # # estimate 3d points given current estimate of projection matrices 
     # obs_3d = x[n_cams*6:].reshape((n_obs, 3))

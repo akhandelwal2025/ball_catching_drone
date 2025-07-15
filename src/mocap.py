@@ -101,7 +101,7 @@ class BaseMocap(ABC):
             upper: List[int] - upper bound of values to use to create mask
         """
         num_imgs = imgs.shape[0]
-        centers = np.zeros((num_imgs, num_centers, 2), dtype=np.float32)
+        centers = np.full((num_imgs, num_centers, 2), -1, dtype=np.float32)
         for i in range(num_imgs):
             img = imgs[i]
             # print("img.shape:", img.shape, "img.dtype:", img.dtype)
