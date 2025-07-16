@@ -109,8 +109,8 @@ class TestEnv():
             breakpoint()
             projected_pt /= projected_pt[-1]
             projected_pt = projected_pt[:2]
-            projected_pt = np.round(projected_pt).astype(int)
             self.projected_pts[i, :] = projected_pt
+            projected_pt = np.round(projected_pt).astype(int)
             x, y = projected_pt[0], projected_pt[1]
             print(y, x)
             if valid(y, x):
