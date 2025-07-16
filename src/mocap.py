@@ -104,17 +104,18 @@ class BaseMocap(ABC):
         cam4_K = self.cam4_arrs['intrinsics']
         cam4_dist = self.cam4_arrs['distortion_coeffs']
 
-        n_obs = pts_2d.shape[0] // 4
+        # n_obs = pts_2d.shape[0] // 4
+        n_obs = pts_2d.shape[0] // 2
         pts_2d_undistorted = np.empty(pts_2d.shape, dtype=np.float32)
         for i in range(n_obs):
             pt1 = pts_2d[4*i]
             pt2 = pts_2d[4*i+1]
-            pt3 = pts_2d[4*i+2]
-            pt4 = pts_2d[4*i+3]
+            # pt3 = pts_2d[4*i+2]
+            # pt4 = pts_2d[4*i+3]
             pts_2d_undistorted[4*i] = cv2.undistortPoints(pt1, cam1_K, cam1_dist, P=cam1_K) if not np.any(pt1 == -1) else pt1
             pts_2d_undistorted[4*i+1] = cv2.undistortPoints(pt2, cam2_K, cam2_dist, P=cam2_K) if not np.any(pt2 == -1) else pt2
-            pts_2d_undistorted[4*i+2] = cv2.undistortPoints(pt3, cam3_K, cam3_dist, P=cam3_K) if not np.any(pt3 == -1) else pt3
-            pts_2d_undistorted[4*i+3] = cv2.undistortPoints(pt4, cam4_K, cam4_dist, P=cam4_K) if not np.any(pt4 == -1) else pt4
+            # pts_2d_undistorted[4*i+2] = cv2.undistortPoints(pt3, cam3_K, cam3_dist, P=cam3_K) if not np.any(pt3 == -1) else pt3
+            # pts_2d_undistorted[4*i+3] = cv2.undistortPoints(pt4, cam4_K, cam4_dist, P=cam4_K) if not np.any(pt4 == -1) else pt4
         return pts_2d_undistorted
     
     def locate_centers(self, imgs, num_centers, lower, upper):
