@@ -3,6 +3,7 @@ import numpy as np
 import src.utils as utils
 import cv2
 import open3d as o3d
+from pseyepy import Camera, cam_count
 
 class Vis():
     def __init__(self,
@@ -56,32 +57,36 @@ class Vis():
     def render(self,
                centers,
                imgs,
-               pt_3d):
+               pts_3d):
         
-        R_x = np.array([
-            [1., 0., 0.,],
-            [0., np.cos(-np.pi/2), -np.sin(-np.pi/2)],
-            [0., np.sin(-np.pi/2), np.cos(-np.pi/2)]
-        ])
-        new_x = R_x @ np.array([1, 0, 0])
-        new_y = R_x @ np.array([0, 1, 0])
-        new_z = R_x @ np.array([0, 0, 1])
-        pt_3d = pt_3d / 2    
-        # translation = (pt_3d[:, 0][np.newaxis, :] * new_x[np.newaxis, :] + pt_3d[:, 1][np.newaxis] * new_y[np.newaxis, :] + pt_3d[:, 2][np.newaxis] * new_z[np.newaxis, :])
-        translation = (
-            pt_3d[:, 0:1] * new_x[np.newaxis, :] +
-            pt_3d[:, 1:2] * new_y[np.newaxis, :] +
-            pt_3d[:, 2:3] * new_z[np.newaxis, :]
-        )
-        if len(translation.shape) == 1:
-            translation = translation[np.newaxis, :]
-        print(f"translations: {translation.shape}")
-        self.pcd.points = o3d.utility.Vector3dVector(translation)
-        self.pcd.colors = o3d.utility.Vector3dVector([[1.0, 0.0, 0.0] for _ in range(len(translation))])
-        self.vis.update_geometry(self.pcd)
-
+        if pts_3d is not None:
+            R_x = np.array([
+                [1., 0., 0.,],
+                [0., np.cos(-np.pi/2), -np.sin(-np.pi/2)],
+                [0., np.sin(-np.pi/2), np.cos(-np.pi/2)]
+            ])
+            new_x = R_x @ np.array([1, 0, 0])
+            new_y = R_x @ np.array([0, 1, 0])
+            new_z = R_x @ np.array([0, 0, 1])
+            pts_3d = pts_3d / 2    
+            # translation = (pt_3d[:, 0][np.newaxis, :] * new_x[np.newaxis, :] + pt_3d[:, 1][np.newaxis] * new_y[np.newaxis, :] + pt_3d[:, 2][np.newaxis] * new_z[np.newaxis, :])
+            translation = (
+                pts_3d[:, 0:1] * new_x[np.newaxis, :] +
+                pts_3d[:, 1:2] * new_y[np.newaxis, :] +
+                pts_3d[:, 2:3] * new_z[np.newaxis, :]
+            )
+            if len(translation.shape) == 1:
+                translation = translation[np.newaxis, :]
+            print(f"translations: {translation.shape}")
+            self.pcd.points = o3d.utility.Vector3dVector(translation)
+            self.pcd.colors = o3d.utility.Vector3dVector([[1.0, 0.0, 0.0] for _ in range(len(translation))])
+            self.vis.update_geometry(self.pcd)
         self.vis.poll_events()
         self.vis.update_renderer()
+
+        if imgs is None:
+            resolution = (320, 240) if self.cfg['pseyepy_params']['resolution'] == Camera.RES_SMALL else (640, 480)
+            imgs = np.zeros((4, resolution[0], resolution[1]))
 
         # render each of the images
         cv2.namedWindow("Camera 1")

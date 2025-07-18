@@ -8,6 +8,7 @@ from src.vis import Vis
 from src.env import TestEnv
 from scipy.optimize import least_squares
 from scipy.spatial.transform import Rotation as R
+import multiprocessing as mp
 
 class FakeCameras():
     def __init__(self,
@@ -27,9 +28,25 @@ class FakeCameras():
 class BaseMocap(ABC):
     def __init__(self, mocap_cfg):
         self.mocap_cfg = mocap_cfg
-        self.vis = Vis(self.mocap_cfg,
-                       self.cam_pos,
-                       self.cam_eulers)
+        # self.vis = Vis(self.mocap_cfg,
+        #                self.cam_pos,
+        #                self.cam_eulers)
+        
+        # self.imgs_queue = mp.Queue(maxsize=1)
+        # self.centers_queue = mp.Queue(maxsize=1)
+        # self.pts_3d_queue = mp.Queue(maxsize=1)
+        self.manager = mp.Manager()
+        self.shared_data = self.manager.dict()
+
+        self.stop_event = mp.Event()
+        self.process = mp.Process(target=self.run_vis_background,
+                                  args=(self.mocap_cfg,
+                                        self.cam_pos,
+                                        self.cam_eulers,
+                                        self.shared_data,
+                                        self.stop_event))
+        
+        self.process.start()
 
         self.construct_intrinsics()
         self.construct_extrinsics_wf()
@@ -59,6 +76,26 @@ class BaseMocap(ABC):
     def render(self):
         pass
 
+    def run_vis_background(self,
+                           cfg,
+                           cam_pos,
+                           cam_eulers,
+                           shared_data,
+                           stop_event):
+        self.vis = Vis(cfg,
+                       cam_pos,
+                       cam_eulers)
+        while not stop_event.is_set():
+            # imgs = imgs_queue.get() if not imgs_queue.empty() else None
+            # centers = centers_queue.get() if not centers_queue.empty() else None
+            # pts_3d = pts_3d_queue.get() if not pts_3d_queue.empty() else None
+            imgs = shared_data['imgs']
+            centers = shared_data['centers']
+            pts_3d = shared_data['pts_3d']
+            self.vis.render(centers=centers,
+                            imgs=imgs,
+                            pts_3d=pts_3d)
+            print("rendering")
     def to_cam1(self, extrinsics_wc, extrinsics_cw):
         """
         Given a set of extrinsics defined in a world frame, transform all extrinsics to be relative to cam1
@@ -104,18 +141,17 @@ class BaseMocap(ABC):
         cam4_K = self.cam4_arrs['intrinsics']
         cam4_dist = self.cam4_arrs['distortion_coeffs']
 
-        # n_obs = pts_2d.shape[0] // 4
-        n_obs = pts_2d.shape[0] // 2
+        n_obs = pts_2d.shape[0] // 4
         pts_2d_undistorted = np.empty(pts_2d.shape, dtype=np.float32)
         for i in range(n_obs):
             pt1 = pts_2d[4*i]
             pt2 = pts_2d[4*i+1]
-            # pt3 = pts_2d[4*i+2]
-            # pt4 = pts_2d[4*i+3]
+            pt3 = pts_2d[4*i+2]
+            pt4 = pts_2d[4*i+3]
             pts_2d_undistorted[4*i] = cv2.undistortPoints(pt1, cam1_K, cam1_dist, P=cam1_K) if not np.any(pt1 == -1) else pt1
             pts_2d_undistorted[4*i+1] = cv2.undistortPoints(pt2, cam2_K, cam2_dist, P=cam2_K) if not np.any(pt2 == -1) else pt2
-            # pts_2d_undistorted[4*i+2] = cv2.undistortPoints(pt3, cam3_K, cam3_dist, P=cam3_K) if not np.any(pt3 == -1) else pt3
-            # pts_2d_undistorted[4*i+3] = cv2.undistortPoints(pt4, cam4_K, cam4_dist, P=cam4_K) if not np.any(pt4 == -1) else pt4
+            pts_2d_undistorted[4*i+2] = cv2.undistortPoints(pt3, cam3_K, cam3_dist, P=cam3_K) if not np.any(pt3 == -1) else pt3
+            pts_2d_undistorted[4*i+3] = cv2.undistortPoints(pt4, cam4_K, cam4_dist, P=cam4_K) if not np.any(pt4 == -1) else pt4
         return pts_2d_undistorted
     
     def locate_centers(self, imgs, num_centers, lower, upper):
@@ -344,6 +380,9 @@ class PsEyeMocap(BaseMocap):
                imgs,
                pts_3d):
         centers = centers.astype(int)
-        self.vis.render(centers,
-                        imgs,
-                        pts_3d)
+        self.shared_data['centers'] = centers
+        self.shared_data['pts_3d'] = pts_3d
+        self.shared_data['imgs'] = imgs
+        # self.centers_queue.put_nowait(centers)
+        # # self.imgs_queue.put(imgs)
+        # self.pts_3d_queue.put_nowait(pts_3d)

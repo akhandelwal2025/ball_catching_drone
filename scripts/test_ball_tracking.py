@@ -7,7 +7,6 @@ import argparse
 import yaml
 import src.utils as utils
 
-# BLACK HSV BOUNDS
 LOWER = np.array([50, 50, 50], dtype=np.uint8)
 UPPER = np.array([255, 255, 255], dtype=np.uint8)
 
