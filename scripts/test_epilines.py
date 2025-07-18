@@ -33,7 +33,7 @@ while True:
                                     lower=LOWER,
                                     upper=UPPER)
     centers = centers.reshape((centers.shape[0] * centers.shape[1], centers.shape[2]))
-    centers = mocap.undistort_points(centers) # TODO THIS ONLY WORKS WITH NUM_CENTERS=1 IN LOCATE_CENTERS RIGHT NOW!!!!!!!!
+    # centers = mocap.undistort_points(centers) # TODO THIS ONLY WORKS WITH NUM_CENTERS=1 IN LOCATE_CENTERS RIGHT NOW!!!!!!!!
     print(centers)
     c1_pt = centers[0]
     c2_epiline = cv2.computeCorrespondEpilines(c1_pt.reshape(1, 1, 2), 1, F12)
@@ -59,7 +59,7 @@ while True:
     y1 = int(round(-(a * x1 + c) / b))
     print(x0, y0)
     print(x1, y1)
-    img2 = cv2.line(img2, (x0, y0), (x1, y1), color=(0, 255, 0), thickness=2)
+    img2 = cv2.line(img2, (x0, y0), (x1, y1), color=(0, 255, 0), thickness=1)
 
     cv2.imshow(f"Cam 2", img2)
     cv2.waitKey(1)
