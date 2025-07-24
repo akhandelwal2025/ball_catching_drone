@@ -394,10 +394,10 @@ class PsEyeMocap(BaseMocap):
                                     mocap_cfg['eulers']['cam4']], axis=0)
         self.cam_eulers = np.radians(self.cam_eulers)
 
-        self.cam1_arrs = np.load("data/zoomed_intrinsics/cam1.npz")
-        self.cam2_arrs = np.load("data/zoomed_intrinsics/cam2.npz")
-        self.cam3_arrs = np.load("data/zoomed_intrinsics/cam3.npz")
-        self.cam4_arrs = np.load("data/zoomed_intrinsics/cam4.npz")
+        self.cam1_arrs = np.load("data/redone_intrinsics/cam1.npz")
+        self.cam2_arrs = np.load("data/redone_intrinsics/cam2.npz")
+        self.cam3_arrs = np.load("data/redone_intrinsics/cam3.npz")
+        self.cam4_arrs = np.load("data/redone_intrinsics/cam4.npz")
 
         super().__init__(mocap_cfg)
 

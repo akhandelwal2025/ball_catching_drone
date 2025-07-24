@@ -3,51 +3,48 @@ import yaml
 import numpy as np
 import cv2
 
+def Fs_through_mocap(mocap):
+    Fs = []
+    for i in range(1, 4):
+        ext_c1ci = mocap.extrinsics_c1c[i]
+        R = ext_c1ci[:3, :3]
+        t = ext_c1ci[:3, 3]
+        K1_inv = np.linalg.inv(mocap.intrinsics[0])
+        Ki_inv = np.linalg.inv(mocap.intrinsics[i])
+
+        t_x = np.array([
+            [0., -t[2], t[1]],
+            [t[2], 0., -t[0]],
+            [-t[1], t[0], 0.]
+        ])
+        E = t_x @ R
+        F1i = Ki_inv.T @ E @ K1_inv
+        Fs.append(F1i)
+    return tuple(Fs)
+
+def Fs_through_points(pts_2d):
+    Fs = []
+    pts_1 = pts_2d[0]
+    for i in range(1, 4):
+        pts_i = pts_2d[i]
+        F1i, _ = cv2.findFundamentalMat(pts_1, pts_i, method=cv2.FM_RANSAC)
+        Fs.append(F1i)
+    return tuple(Fs)
+
 with open('cfgs/PSEyeMocap.yaml', "r") as file:
         cfg = yaml.safe_load(file)
 mocap = PsEyeMocap(cfg)
+mocap_Fs = Fs_through_mocap(mocap)
 
-ext_c1c2 = mocap.extrinsics_c1c[1]
-R = ext_c1c2[:3, :3]
-t = ext_c1c2[:3, 3]
-K1_inv = np.linalg.inv(mocap.intrinsics[0])
-K2_inv = np.linalg.inv(mocap.intrinsics[1])
+all_pts = np.load("data/pts_2d.npz")['pts_2d']
+pts_2d = np.empty((4, 50, 2), dtype=np.float32)
+pts_2d[0] = all_pts[0::4]
+pts_2d[1] = all_pts[1::4]
+pts_2d[2] = all_pts[2::4]
+pts_2d[3] = all_pts[3::4]
+pts_Fs = Fs_through_points(pts_2d)
 
-t_x = np.array([
-    [0., -t[2], t[1]],
-    [t[2], 0., -t[0]],
-    [-t[1], t[0], 0.]
-])
-E = t_x @ R
-F12 = K2_inv.T @ E @ K1_inv
-
-ext_c1c3 = mocap.extrinsics_c1c[2]
-R = ext_c1c3[:3, :3]
-t = ext_c1c3[:3, 3]
-K1_inv = np.linalg.inv(mocap.intrinsics[0])
-K3_inv = np.linalg.inv(mocap.intrinsics[2])
-
-t_x = np.array([
-    [0., -t[2], t[1]],
-    [t[2], 0., -t[0]],
-    [-t[1], t[0], 0.]
-])
-E = t_x @ R
-F13 = K3_inv.T @ E @ K1_inv
-
-ext_c1c4 = mocap.extrinsics_c1c[3]
-R = ext_c1c4[:3, :3]
-t = ext_c1c4[:3, 3]
-K1_inv = np.linalg.inv(mocap.intrinsics[0])
-K4_inv = np.linalg.inv(mocap.intrinsics[3])
-
-t_x = np.array([
-    [0., -t[2], t[1]],
-    [t[2], 0., -t[0]],
-    [-t[1], t[0], 0.]
-])
-E = t_x @ R
-F14 = K4_inv.T @ E @ K1_inv
+F12, F13, F14 = pts_Fs
 
 LOWER = np.array([50, 50, 50], dtype=np.uint8)
 UPPER = np.array([255, 255, 255], dtype=np.uint8)

@@ -43,10 +43,10 @@ def collect_imgs(mocap, n_frames):
     return pts_2d
 
 def undistort_points(pts_2d):
-    cam1_arrs = np.load("data/zoomed_intrinsics/cam1.npz")
-    cam2_arrs = np.load("data/zoomed_intrinsics/cam2.npz")
-    cam3_arrs = np.load("data/zoomed_intrinsics/cam3.npz")
-    cam4_arrs = np.load("data/zoomed_intrinsics/cam4.npz")
+    cam1_arrs = np.load("data/redone_intrinsics/cam1.npz")
+    cam2_arrs = np.load("data/redone_intrinsics/cam2.npz")
+    cam3_arrs = np.load("data/redone_intrinsics/cam3.npz")
+    cam4_arrs = np.load("data/redone_intrinsics/cam4.npz")
 
     cam1_K = cam1_arrs['intrinsics']
     cam1_dist = cam1_arrs['distortion_coeffs']
@@ -252,7 +252,7 @@ if __name__ == "__main__":
     np.set_printoptions(precision=3, suppress=True)
     parser = argparse.ArgumentParser(description='Description of your program')
     parser.add_argument('--mocap_cfg', type=str, default='cfgs/PSEyeMocap.yaml')
-    parser.add_argument('--n_frames', type=int, default=30)
-    parser.add_argument('--imgs', type=str, default='data/pts_2d.npz')
+    parser.add_argument('--n_frames', type=int, default=50)
+    parser.add_argument('--imgs', type=str, default='pts_2d.npz')
     args = parser.parse_args()  
     main(args)
