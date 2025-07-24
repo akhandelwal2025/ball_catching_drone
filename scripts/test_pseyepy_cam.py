@@ -5,8 +5,9 @@ from src.vis import Vis
 
 c = Camera(fps=150, 
            resolution=Camera.RES_SMALL,
-           gain=63,
-           exposure=255)
+        #    gain=63,
+        #    exposure=255)
+)
 n_cams = cam_count()
 # c.check_fps(n_seconds=60)
 

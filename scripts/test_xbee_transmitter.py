@@ -14,14 +14,20 @@ def find_xbee():
         device.open()
         node_id = device.get_node_id()
         print(f"XBee found on {port.device}, Node ID: {node_id}")
-        return device
+        xbee_network = device.get_network()
+        remote_device = xbee_network.discover_device("End Device")
+        if remote_device is None:
+            print("Could not find the remote device")
+        else:
+            print("Found Receiver Xbee")
+        return device, remote_device
 
-device = find_xbee()
+device, remote_device = find_xbee()
 if device is not None:
     try:
         while True:
             start_sec = time.time()
-            device.send_data_broadcast("ABCDEFGH")
+            device.send_data_async(remote_device, "ABCDEFGH")
             print(f"Elapsed: {time.time() - start_sec}")
             # time.sleep(max(0, PERIOD_SEC - (time.time() - start_sec)))
     except Exception as e:

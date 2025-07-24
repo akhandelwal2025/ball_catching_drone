@@ -16,7 +16,7 @@ def calibrate(c, save_file):
     imgs = []
     imgpoints = []
     objpoints = []
-    while len(imgs) < 10:
+    while len(imgs) < 25:
         frame, timestep = c.read()
         image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -68,8 +68,9 @@ def calibrate(c, save_file):
 if __name__ == "__main__":
     c = Camera(fps=150, 
                 resolution=Camera.RES_SMALL,
-                gain=63,
-                exposure=255)
+                gain=48,
+                exposure=128
+                )
     save_file = input("Filename to save intrinsic matrix under: ")
     print(f"Saving under {save_file}")
     imgs = calibrate(c, save_file)

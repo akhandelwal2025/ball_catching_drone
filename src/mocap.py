@@ -37,6 +37,11 @@ class BaseMocap(ABC):
         # self.pts_3d_queue = mp.Queue(maxsize=1)
         self.manager = mp.Manager()
         self.shared_data = self.manager.dict()
+        
+        # initialize keys
+        self.shared_data['centers'] = None
+        self.shared_data['imgs'] = None
+        self.shared_data['pts_3d'] = None
 
         self.stop_event = mp.Event()
         self.process = mp.Process(target=self.run_vis_background,
@@ -52,7 +57,8 @@ class BaseMocap(ABC):
         self.construct_extrinsics_wf()
         self.construct_extrinsics_c1f()
         self.construct_projections()
-    
+        self.construct_fundamental_matrices()
+
     @abstractmethod
     def construct_intrinsics(self):
         pass
@@ -95,7 +101,6 @@ class BaseMocap(ABC):
             self.vis.render(centers=centers,
                             imgs=imgs,
                             pts_3d=pts_3d)
-            print("rendering")
     def to_cam1(self, extrinsics_wc, extrinsics_cw):
         """
         Given a set of extrinsics defined in a world frame, transform all extrinsics to be relative to cam1
@@ -154,6 +159,56 @@ class BaseMocap(ABC):
             pts_2d_undistorted[4*i+3] = cv2.undistortPoints(pt4, cam4_K, cam4_dist, P=cam4_K) if not np.any(pt4 == -1) else pt4
         return pts_2d_undistorted
     
+    def find_correspondences(self, centers):
+        num_imgs = centers.shape[0]
+        num_centers = centers.shape[1]
+        correspondences = np.full((num_centers, num_imgs, 2), -1, dtype=np.float32)
+        for i in range(num_centers):
+            c1_pt = centers[0, i]
+            correspondences[i, 0] = c1_pt
+
+            # find correspondences in camera2
+            c2_pts = centers[1, :]
+            c2_epiline = cv2.computeCorrespondEpilines(c1_pt.reshape((1, 1, 2)), 1, self.F12)
+            c2_epiline = c2_epiline.reshape(3,)
+            a, b, c = c2_epiline[0], c2_epiline[1], c2_epiline[2]
+            c2_dists = np.abs(a * c2_pts[:, 0] + b * c2_pts[:, 1] + c) / np.sqrt(a ** 2 + b ** 2)
+            correspondences[i, 1] = c2_pts[np.argmin(c2_dists)]
+            # for j in range(num_centers):
+            #     if c2_dists[j] < self.mocap_cfg['epipolar_dist_threshold']:
+            #         correspondences[i, 1] = c2_pts[j]
+            #         break
+
+            # find correspondences in camera3
+            c3_pts = centers[2, :]
+            c3_epiline = cv2.computeCorrespondEpilines(c1_pt.reshape((1, 1, 2)), 1, self.F13)
+            c3_epiline = c3_epiline.reshape(3,)
+            a, b, c = c3_epiline[0], c3_epiline[1], c3_epiline[2]
+            c3_dists = np.abs(a * c3_pts[:, 0] + b * c3_pts[:, 1] + c) / np.sqrt(a ** 2 + b ** 2)
+            correspondences[i, 2] = c3_pts[np.argmin(c3_dists)]
+            # for j in range(num_centers):
+            #     if c3_dists[j] < self.mocap_cfg['epipolar_dist_threshold']:
+            #         correspondences[i, 2] = c3_pts[j]
+            #         break
+            
+            # find correspondences in camera4
+            c4_pts = centers[3, :]
+            c4_epiline = cv2.computeCorrespondEpilines(c1_pt.reshape((1, 1, 2)), 1, self.F14)
+            c4_epiline = c4_epiline.reshape(3,)
+            a, b, c = c4_epiline[0], c4_epiline[1], c4_epiline[2]
+            c4_dists = np.abs(a * c4_pts[:, 0] + b * c4_pts[:, 1] + c) / np.sqrt(a ** 2 + b ** 2)
+            correspondences[i, 3] = c4_pts[np.argmin(c4_dists)]
+            print(f"c2_dists: {c2_dists}")
+            print(f"c3_dists: {c3_dists}")
+            print(f"c4_dists: {c4_dists}")
+            print("------------------")
+            # for j in range(num_centers):
+            #     if c4_dists[j] < self.mocap_cfg['epipolar_dist_threshold']:
+            #         correspondences[i, 3] = c4_pts[j]
+            #         break
+        return correspondences
+            
+
     def locate_centers(self, imgs, num_centers, lower, upper):
         """
         Locate IR dots in set of images
@@ -167,12 +222,9 @@ class BaseMocap(ABC):
         centers = np.full((num_imgs, num_centers, 2), -1, dtype=np.float32)
         for i in range(num_imgs):
             img = imgs[i]
-            # print("img.shape:", img.shape, "img.dtype:", img.dtype)
-            # print("lower:", lower, "shape:", np.array(lower).shape, "dtype:", np.array(lower).dtype)
-            # print("upper:", upper, "shape:", np.array(upper).shape, "dtype:", np.array(upper).dtype)\
             mask = cv2.inRange(img, lower, upper)
             if not self.mocap_cfg['use_fake_imgs']:
-                # mask = cv2.erode(mask, None, iterations=2)
+                mask = cv2.erode(mask, None, iterations=2)
                 mask = cv2.dilate(mask, None, iterations=2)
             contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
             contours = list(contours)
@@ -186,6 +238,10 @@ class BaseMocap(ABC):
                         img_centers.append([(M["m10"] / M["m00"]), (M["m01"] / M["m00"])])
             if len(img_centers) != 0:
                 centers[i, :len(img_centers), :] = img_centers
+        
+        if num_centers > 1:
+            return centers, self.find_correspondences(centers)
+        
         return centers
     
     def bundle_adjustment(self, n_obs):
@@ -370,6 +426,50 @@ class PsEyeMocap(BaseMocap):
         self.projections_wf = self.intrinsics @ self.extrinsics_wc
         self.projections_c1f = self.intrinsics @ self.extrinsics_c1c
     
+    def construct_fundamental_matrices(self):
+        # TODO gonna hardcode this because putting in np arrays is confusing index wise
+        # Camera 1 -> Camera 2
+        ext_c1c2 = self.extrinsics_c1c[1]
+        R = ext_c1c2[:3, :3]
+        t = ext_c1c2[:3, 3]
+        K1_inv = np.linalg.inv(self.intrinsics[0])
+        K2_inv = np.linalg.inv(self.intrinsics[1])
+        t_x = np.array([
+            [0., -t[2], t[1]],
+            [t[2], 0., -t[0]],
+            [-t[1], t[0], 0.]
+        ])
+        E = t_x @ R
+        self.F12 = K2_inv.T @ E @ K1_inv
+
+        # Camera 1 -> Camera 3
+        ext_c1c3 = self.extrinsics_c1c[2]
+        R = ext_c1c3[:3, :3]
+        t = ext_c1c3[:3, 3]
+        K1_inv = np.linalg.inv(self.intrinsics[0])
+        K3_inv = np.linalg.inv(self.intrinsics[2])
+        t_x = np.array([
+            [0., -t[2], t[1]],
+            [t[2], 0., -t[0]],
+            [-t[1], t[0], 0.]
+        ])
+        E = t_x @ R
+        self.F13 = K3_inv.T @ E @ K1_inv
+
+        # Camera 1 -> Camera 4
+        ext_c1c4 = self.extrinsics_c1c[3]
+        R = ext_c1c4[:3, :3]
+        t = ext_c1c4[:3, 3]
+        K1_inv = np.linalg.inv(self.intrinsics[0])
+        K4_inv = np.linalg.inv(self.intrinsics[3])
+        t_x = np.array([
+            [0., -t[2], t[1]],
+            [t[2], 0., -t[0]],
+            [-t[1], t[0], 0.]
+        ])
+        E = t_x @ R
+        self.F14 = K4_inv.T @ E @ K1_inv
+
     def read_cameras(self):
         imgs, timesteps = self.c.read()
         self.imgs = np.array(imgs)

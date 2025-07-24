@@ -71,10 +71,11 @@ fake_imgs_filepath: 'data/fake_imgs_5.npz'
 pseyepy_params:
   fps: 150
   gain: 63                  # [0-63]
-  exposure: 255             # [0-255]
+  exposure: 128             # [0-255]
   resolution: 'small'       # ['small, 'large]
 gauss_blur_kernel: [11, 11]
 mask_lower: [0., 0., 0.]
 mask_upper: [50., 50., 50.]
+epipolar_dist_threshold: 5.
 wand_params:
   num_centers: 3

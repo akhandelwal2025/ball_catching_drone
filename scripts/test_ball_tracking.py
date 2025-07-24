@@ -14,7 +14,6 @@ def main(args):
     with open(args.mocap_cfg, "r") as file:
         cfg = yaml.safe_load(file)
     mocap = PsEyeMocap(cfg)
-    breakpoint()
     start = time.time()
     frames = 0
     all_pts = []
@@ -24,22 +23,22 @@ def main(args):
             iter_start = time.time()
             imgs = mocap.read_cameras()
             imgs = imgs.copy()
-            centers = mocap.locate_centers(imgs=imgs,
-                                          num_centers=1,
+            centers, correspondences = mocap.locate_centers(imgs=imgs,
+                                          num_centers=2,
                                           lower=LOWER,
                                           upper=UPPER)
-            centers = centers.reshape((centers.shape[0] * centers.shape[1], centers.shape[2]))
-            centers = mocap.undistort_points(centers) # TODO THIS ONLY WORKS WITH NUM_CENTERS=1 IN LOCATE_CENTERS RIGHT NOW!!!!!!!!
-            pt_3d = utils.DLT(centers, mocap.projections_wf)
-            if frames % 2 == 0:
-                all_pts.append(pt_3d)
-                # print(all_pts)
-            print(centers)
-            print(pt_3d)
-            print("-------------------------")
+            centers = centers.transpose((1, 0, 2)).reshape((centers.shape[0] * centers.shape[1], centers.shape[2]))
+            # centers = mocap.undistort_points(centers) # TODO THIS ONLY WORKS WITH NUM_CENTERS=1 IN LOCATE_CENTERS RIGHT NOW!!!!!!!!
+            # pt_3d = utils.DLT(centers, mocap.projections_wf)
+            # if frames % 2 == 0:
+            #     all_pts.append(pt_3d)
+            #     # print(all_pts)
+            # print(centers)
+            # print(pt_3d)
+            # print("-------------------------")
             mocap.render(centers=centers,
                          imgs=imgs,
-                         pts_3d=np.array(all_pts))
+                         pts_3d=None)
             
             # for i in range(len(imgs)):
             #     img = imgs[i]

@@ -1,27 +1,30 @@
 import numpy as np
 import cv2
 from pseyepy import Camera
-
+import yaml
+from src.mocap import PsEyeMocap
 # c = Camera(fps=150, 
 #            resolution=Camera.RES_SMALL,
-#            gain=63,
-#            exposure=255)
-pts_2d = np.load('data/pts_2d.npz')['pts_2d']
-cam1_arrs = np.load('cam1.npz')
+#            gain=48,
+#            exposure=128)
+# pts_2d = np.load('data/pts_2d.npz')['pts_2d']
+LOWER = np.array([50, 50, 50], dtype=np.uint8)
+UPPER = np.array([255, 255, 255], dtype=np.uint8)
+with open("cfgs/PSEyeMocap.yaml", "r") as file:
+        cfg = yaml.safe_load(file)
+mocap = PsEyeMocap(cfg)
+cam1_arrs = np.load('cam1_redone.npz')
 K = cam1_arrs['intrinsics']
 dist = cam1_arrs['distortion_coeffs']
-n_obs = pts_2d.shape[0] // 4
-for i in range(n_obs):
-    pt1 = pts_2d[4*i].reshape((1, 1, 2))
-    undistorted = cv2.undistortPoints(pt1, K, dist, P=K)
-    print(f"og_pt: {pt1} ")
-    print(f"undistorted: {undistorted}")
-    print("----------------------")
-
-# while True:
-#     frame, timestep = c.read()
-#     frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-#     undistorted = cv2.undistort(frame, K, dist)
-#     cv2.imshow("original", frame)
-#     cv2.imshow("undistorted", undistorted)
-#     cv2.waitKey(1)
+while True:
+    imgs = mocap.read_cameras()
+    imgs = imgs.copy()
+    centers, correspondences = mocap.locate_centers(imgs=imgs[np.newaxis, :],
+                                    num_centers=1,
+                                    lower=LOWER,
+                                    upper=UPPER)
+    centers_undistorted = cv2.undistortPoints(centers, K, dist, P=K)
+    mocap.render(centers, imgs=imgs, pts_3d=None)
+    print(f"before: {centers}")
+    print(f"after: {centers_undistorted}")
+    print("-----------------")
