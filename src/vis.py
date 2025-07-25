@@ -57,8 +57,8 @@ class Vis():
     def render(self,
                centers,
                imgs,
+               epilines,
                pts_3d):
-        
         if pts_3d is not None:
             R_x = np.array([
                 [1., 0., 0.,],
@@ -77,7 +77,6 @@ class Vis():
             )
             if len(translation.shape) == 1:
                 translation = translation[np.newaxis, :]
-            print(f"translations: {translation.shape}")
             self.pcd.points = o3d.utility.Vector3dVector(translation)
             self.pcd.colors = o3d.utility.Vector3dVector([[1.0, 0.0, 0.0] for _ in range(len(translation))])
             self.vis.update_geometry(self.pcd)
@@ -107,6 +106,17 @@ class Vis():
                     img = imgs[i]
                     img = cv2.circle(img, centers[4 * c + i], radius=3, color=[0, 0, 255])
                     imgs[i] = img
+        
+        if epilines is not None:
+            for i in range(4):
+                epiline_cami = epilines[i]
+                for j in range(epiline_cami.shape[0]):
+                    a, b, c = epiline_cami[j, 0], epiline_cami[j, 1], epiline_cami[j, 2]
+                    x0, x1 = 0, imgs[i].shape[1]
+                    y0 = int(round(-(a * x0 + c) / b))
+                    y1 = int(round(-(a * x1 + c) / b))
+                    imgs[i] = cv2.line(imgs[i], (x0, y0), (x1, y1), color=(0, 255, 0), thickness=1)
+    
         cv2.imshow("Camera 1", imgs[0])
         cv2.imshow("Camera 2", imgs[1])
         cv2.imshow("Camera 3", imgs[2])
